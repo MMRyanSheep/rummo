@@ -1,1 +1,4 @@
 /target
+/server
+/tools/*
+!/tools/run-server/
