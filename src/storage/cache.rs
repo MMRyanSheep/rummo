@@ -58,7 +58,7 @@ impl SkillCache {
 
 #[cfg(test)]
 mod tests {
-    use crate::skill_manager::SkillType;
+    use crate::skills::skill_manager::SkillType;
 
     use super::*;
 

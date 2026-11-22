@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use pumpkin_plugin_api::Result;
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
-use crate::skill_manager::SkillType;
+use crate::skills::skill_manager::SkillType;
 
 use super::{Progress, SkillRows};
 

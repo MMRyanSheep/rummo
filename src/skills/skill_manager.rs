@@ -67,7 +67,7 @@ impl SkillManager {
         with_manager(|manager| manager.info(key, manager.storage.progress(key)))
     }
 
-    pub(super) fn initialize(context: &Context) -> Result<()> {
+    pub(crate) fn initialize(context: &Context) -> Result<()> {
         let data_folder = context.get_data_folder();
         let manager = Self::open(Path::new(&data_folder))?;
         let storage = Arc::clone(&manager.storage);
@@ -76,7 +76,7 @@ impl SkillManager {
         Ok(())
     }
 
-    pub(super) fn shutdown() -> Result<()> {
+    pub(crate) fn shutdown() -> Result<()> {
         let manager = MANAGER.lock().expect("skill manager lock").take();
         if let Some(manager) = manager {
             manager.storage.shutdown()?;

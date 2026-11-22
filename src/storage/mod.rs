@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use pumpkin_plugin_api::scheduler::SchedulerExt;
 use pumpkin_plugin_api::{Context, Result};
 
-use crate::skill_manager::SkillType;
+use crate::skills::skill_manager::SkillType;
 
 use self::cache::SkillCache;
 use self::sqlite::SkillDatabase;

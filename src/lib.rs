@@ -1,12 +1,15 @@
 mod commands;
-#[path = "skillManager.rs"]
-pub mod skill_manager;
+mod events;
+pub mod skills;
 mod storage;
 
+use events::mining_event::MiningEvent;
 use pumpkin_plugin_api::permissions::FS_WRITE_DATA;
 use pumpkin_plugin_api::{Context, Plugin, PluginMetadata, Result};
-use skill_manager::SkillManager;
+use skills::skill_manager::SkillManager;
 use tracing::info;
+
+pub use skills::skill_manager;
 
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -30,8 +33,10 @@ impl Plugin for Rummo {
     }
 
     fn on_load(&self, context: Context) -> Result<()> {
+        let mining_event = MiningEvent::load(&context)?;
         commands::register(&context)?;
         SkillManager::initialize(&context)?;
+        mining_event.register(&context)?;
         info!("rummo loaded");
         Ok(())
     }
