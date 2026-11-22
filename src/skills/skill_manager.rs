@@ -46,7 +46,6 @@ pub struct SkillInfo {
 pub struct SkillManager {
     boss_bars: Arc<BossBarManager>,
     config: ExperienceConfig,
-    mining_effects: Arc<MiningEffects>,
     storage: Arc<SkillStorage>,
 }
 
@@ -75,21 +74,14 @@ impl SkillManager {
         context: &Context,
     ) -> Result<(Arc<MiningEffects>, Arc<BossBarManager>)> {
         let data_folder = context.get_data_folder();
-        let manager = Self::open(Path::new(&data_folder))?;
-        let mining_effects = Arc::clone(&manager.mining_effects);
+        let directory = Path::new(&data_folder);
+        let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
+        let manager = Self::open(directory)?;
         let boss_bars = Arc::clone(&manager.boss_bars);
         let storage = Arc::clone(&manager.storage);
         *MANAGER.lock().expect("skill manager lock") = Some(manager);
         storage.schedule_autosave(context);
         Ok((mining_effects, boss_bars))
-    }
-
-    pub(crate) fn refresh_mining_fortune(player: &Player) -> Result<()> {
-        let key = skill_key(player, SkillType::Mining);
-        with_manager(|manager| {
-            let level = manager.storage.progress(key).level;
-            manager.mining_effects.update_fortune(key.0, level);
-        })
     }
 
     pub(crate) fn shutdown() -> Result<()> {
@@ -103,12 +95,10 @@ impl SkillManager {
     fn open(directory: &Path) -> Result<Self> {
         let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml"))?);
         let config = ExperienceConfig::load(&directory.join("experience.toml"))?;
-        let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
         let storage = Arc::new(SkillStorage::open(directory)?);
         Ok(Self {
             boss_bars,
             config,
-            mining_effects,
             storage,
         })
     }
@@ -119,9 +109,6 @@ impl SkillManager {
             self.config
                 .advance(current.level, experience(current.experience))
         });
-        if key.1 == SkillType::Mining && progress.level != previous.level {
-            self.mining_effects.update_fortune(key.0, progress.level);
-        }
         let info = self.info(key, progress);
         if progress != previous {
             self.boss_bars.experience_updated(key.1, info);
@@ -286,7 +273,6 @@ mod tests {
 
         fs::remove_file(directory.join("skills.redb")).unwrap();
         fs::remove_file(directory.join("experience.toml")).unwrap();
-        fs::remove_file(directory.join("mining.toml")).unwrap();
         fs::remove_file(directory.join("bossbar.toml")).unwrap();
         fs::remove_dir(directory).unwrap();
     }

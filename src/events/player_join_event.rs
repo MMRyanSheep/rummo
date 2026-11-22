@@ -3,7 +3,7 @@ use std::sync::Arc;
 use pumpkin_plugin_api::events::{EventData, EventHandler, EventPriority, PlayerJoinEvent};
 use pumpkin_plugin_api::{Context, Result, Server};
 
-use crate::skills::{mining::MiningEffects, skill_manager::SkillManager};
+use crate::skills::mining::MiningEffects;
 use crate::ui::bossbar_manager::BossBarManager;
 
 pub(crate) fn register(
@@ -41,9 +41,6 @@ impl EventHandler<PlayerJoinEvent> for PlayerJoin {
         self.boss_bars.add_player(player);
         self.mining_effects
             .apply_speed(player, player.get_experience_level());
-        if let Err(error) = SkillManager::refresh_mining_fortune(player) {
-            tracing::error!(%error, "Failed to apply mining fortune on join");
-        }
         data
     }
 }

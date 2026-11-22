@@ -39,7 +39,7 @@ impl Plugin for Rummo {
         commands::register(&context)?;
         let (mining_effects, boss_bars) = SkillManager::initialize(&context)?;
         player_join_event::register(&context, mining_effects.clone(), boss_bars.clone())?;
-        player_leave_event::register(&context, mining_effects.clone(), boss_bars.clone())?;
+        player_leave_event::register(&context, boss_bars.clone())?;
         mining::register(&context, mining_effects)?;
         mining_event.register(&context)?;
         bossbar_scheduler::register(&context, &boss_bars);
