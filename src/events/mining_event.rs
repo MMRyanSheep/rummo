@@ -68,7 +68,7 @@ impl EventHandler<BlockBreakEvent> for MiningEvent {
         {
             tracing::error!(block = %data.block, %error, "Failed to add mining experience");
         }
-        data
+        return data
     }
 }
 

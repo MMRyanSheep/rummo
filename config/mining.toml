@@ -1,0 +1,6 @@
+# Added to the 1.0x mining speed multiplier per Minecraft experience level.
+speed_bonus_per_level = 0.1
+
+# Added to the tool's Fortune level per Rummo mining skill level.
+# The fractional part is the chance of rolling the next whole level.
+fortune_bonus_per_level = 0.01

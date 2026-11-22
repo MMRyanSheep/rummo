@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use pumpkin_plugin_api::{Context, Player, Result};
 use serde::Deserialize;
 
+use super::mining::MiningEffects;
 use crate::storage::{Progress, SkillKey, SkillStorage};
 
 static MANAGER: Mutex<Option<SkillManager>> = Mutex::new(None);
@@ -43,6 +44,7 @@ pub struct SkillInfo {
 
 pub struct SkillManager {
     config: ExperienceConfig,
+    mining_effects: Arc<MiningEffects>,
     storage: Arc<SkillStorage>,
 }
 
@@ -67,13 +69,22 @@ impl SkillManager {
         with_manager(|manager| manager.info(key, manager.storage.progress(key)))
     }
 
-    pub(crate) fn initialize(context: &Context) -> Result<()> {
+    pub(crate) fn initialize(context: &Context) -> Result<Arc<MiningEffects>> {
         let data_folder = context.get_data_folder();
         let manager = Self::open(Path::new(&data_folder))?;
+        let mining_effects = Arc::clone(&manager.mining_effects);
         let storage = Arc::clone(&manager.storage);
         *MANAGER.lock().expect("skill manager lock") = Some(manager);
         storage.schedule_autosave(context);
-        Ok(())
+        Ok(mining_effects)
+    }
+
+    pub(crate) fn refresh_mining_fortune(player: &Player) -> Result<()> {
+        let key = skill_key(player, SkillType::Mining);
+        with_manager(|manager| {
+            let level = manager.storage.progress(key).level;
+            manager.mining_effects.update_fortune(key.0, level);
+        })
     }
 
     pub(crate) fn shutdown() -> Result<()> {
@@ -85,15 +96,24 @@ impl SkillManager {
     }
     fn open(directory: &Path) -> Result<Self> {
         let config = ExperienceConfig::load(&directory.join("experience.toml"))?;
+        let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
         let storage = Arc::new(SkillStorage::open(directory)?);
-        Ok(Self { config, storage })
+        Ok(Self {
+            config,
+            mining_effects,
+            storage,
+        })
     }
 
     fn update_experience(&self, key: SkillKey, experience: impl FnOnce(u32) -> u64) -> SkillInfo {
-        let progress = self.storage.update(key, |previous| {
+        let previous = self.storage.progress(key);
+        let progress = self.storage.update(key, |current| {
             self.config
-                .advance(previous.level, experience(previous.experience))
+                .advance(current.level, experience(current.experience))
         });
+        if key.1 == SkillType::Mining && progress.level != previous.level {
+            self.mining_effects.update_fortune(key.0, progress.level);
+        }
         self.info(key, progress)
     }
 
@@ -110,9 +130,12 @@ impl SkillManager {
 }
 
 fn skill_key(player: &Player, skill_type: SkillType) -> SkillKey {
+    (player_uuid(player), skill_type)
+}
+
+pub(super) fn player_uuid(player: &Player) -> u128 {
     let uuid = player.get_id();
-    let player_uuid = (u128::from(uuid.high) << 64) | u128::from(uuid.low);
-    (player_uuid, skill_type)
+    (u128::from(uuid.high) << 64) | u128::from(uuid.low)
 }
 
 fn with_manager<T>(use_manager: impl FnOnce(&SkillManager) -> T) -> Result<T> {
@@ -251,6 +274,7 @@ mod tests {
 
         fs::remove_file(directory.join("skills.redb")).unwrap();
         fs::remove_file(directory.join("experience.toml")).unwrap();
+        fs::remove_file(directory.join("mining.toml")).unwrap();
         fs::remove_dir(directory).unwrap();
     }
 }
