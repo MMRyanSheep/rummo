@@ -2,12 +2,14 @@ mod commands;
 mod events;
 pub mod skills;
 mod storage;
+mod ui;
 
 use events::{mining_event::MiningEvent, player_join_event, player_leave_event};
 use pumpkin_plugin_api::permissions::FS_WRITE_DATA;
 use pumpkin_plugin_api::{Context, Plugin, PluginMetadata, Result};
 use skills::{mining, skill_manager::SkillManager};
 use tracing::info;
+use ui::bossbar_scheduler;
 
 pub use skills::skill_manager;
 
@@ -35,11 +37,12 @@ impl Plugin for Rummo {
     fn on_load(&self, context: Context) -> Result<()> {
         let mining_event = MiningEvent::load(&context)?;
         commands::register(&context)?;
-        let mining_effects = SkillManager::initialize(&context)?;
-        player_join_event::register(&context, mining_effects.clone())?;
-        player_leave_event::register(&context, mining_effects.clone())?;
+        let (mining_effects, boss_bars) = SkillManager::initialize(&context)?;
+        player_join_event::register(&context, mining_effects.clone(), boss_bars.clone())?;
+        player_leave_event::register(&context, mining_effects.clone(), boss_bars.clone())?;
         mining::register(&context, mining_effects)?;
         mining_event.register(&context)?;
+        bossbar_scheduler::register(&context, &boss_bars);
         info!("rummo loaded");
         Ok(())
     }

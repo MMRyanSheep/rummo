@@ -33,9 +33,9 @@ const PENDING_LOOT_LIFETIME: Duration = Duration::from_secs(1);
 struct PendingLoot {
     recorded_at: Instant,
     player_uuid: u128,
-    tool: String,
+    tool: String,                                   
     fortune_level: u32,
-}
+}                               
 
 #[derive(Clone)]
 struct MiningEvents {

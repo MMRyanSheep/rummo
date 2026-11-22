@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use super::mining::MiningEffects;
 use crate::storage::{Progress, SkillKey, SkillStorage};
+use crate::ui::bossbar_manager::BossBarManager;
 
 static MANAGER: Mutex<Option<SkillManager>> = Mutex::new(None);
 
@@ -43,6 +44,7 @@ pub struct SkillInfo {
 }
 
 pub struct SkillManager {
+    boss_bars: Arc<BossBarManager>,
     config: ExperienceConfig,
     mining_effects: Arc<MiningEffects>,
     storage: Arc<SkillStorage>,
@@ -69,14 +71,17 @@ impl SkillManager {
         with_manager(|manager| manager.info(key, manager.storage.progress(key)))
     }
 
-    pub(crate) fn initialize(context: &Context) -> Result<Arc<MiningEffects>> {
+    pub(crate) fn initialize(
+        context: &Context,
+    ) -> Result<(Arc<MiningEffects>, Arc<BossBarManager>)> {
         let data_folder = context.get_data_folder();
         let manager = Self::open(Path::new(&data_folder))?;
         let mining_effects = Arc::clone(&manager.mining_effects);
+        let boss_bars = Arc::clone(&manager.boss_bars);
         let storage = Arc::clone(&manager.storage);
         *MANAGER.lock().expect("skill manager lock") = Some(manager);
         storage.schedule_autosave(context);
-        Ok(mining_effects)
+        Ok((mining_effects, boss_bars))
     }
 
     pub(crate) fn refresh_mining_fortune(player: &Player) -> Result<()> {
@@ -90,15 +95,18 @@ impl SkillManager {
     pub(crate) fn shutdown() -> Result<()> {
         let manager = MANAGER.lock().expect("skill manager lock").take();
         if let Some(manager) = manager {
+            manager.boss_bars.shutdown();
             manager.storage.shutdown()?;
         }
         Ok(())
     }
     fn open(directory: &Path) -> Result<Self> {
+        let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml"))?);
         let config = ExperienceConfig::load(&directory.join("experience.toml"))?;
         let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
         let storage = Arc::new(SkillStorage::open(directory)?);
         Ok(Self {
+            boss_bars,
             config,
             mining_effects,
             storage,
@@ -114,7 +122,11 @@ impl SkillManager {
         if key.1 == SkillType::Mining && progress.level != previous.level {
             self.mining_effects.update_fortune(key.0, progress.level);
         }
-        self.info(key, progress)
+        let info = self.info(key, progress);
+        if progress != previous {
+            self.boss_bars.experience_updated(key.1, info);
+        }
+        info
     }
 
     fn info(&self, (player_uuid, skill_type): SkillKey, progress: Progress) -> SkillInfo {
@@ -133,7 +145,7 @@ fn skill_key(player: &Player, skill_type: SkillType) -> SkillKey {
     (player_uuid(player), skill_type)
 }
 
-pub(super) fn player_uuid(player: &Player) -> u128 {
+pub(crate) fn player_uuid(player: &Player) -> u128 {
     let uuid = player.get_id();
     (u128::from(uuid.high) << 64) | u128::from(uuid.low)
 }
@@ -275,6 +287,7 @@ mod tests {
         fs::remove_file(directory.join("skills.redb")).unwrap();
         fs::remove_file(directory.join("experience.toml")).unwrap();
         fs::remove_file(directory.join("mining.toml")).unwrap();
+        fs::remove_file(directory.join("bossbar.toml")).unwrap();
         fs::remove_dir(directory).unwrap();
     }
 }
