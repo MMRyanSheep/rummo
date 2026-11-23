@@ -1,0 +1,95 @@
+diff --git a/crates/pumpkin-core/src/block/mod.rs b/crates/pumpkin-core/src/block/mod.rs
+--- a/crates/pumpkin-core/src/block/mod.rs
++++ b/crates/pumpkin-core/src/block/mod.rs
+@@ -465,9 +465,20 @@
+     block: &Block,
+     pos: &BlockPos,
+     experience: bool,
+     params: &LootContextParameters,
+ ) {
++    drop_loot_for_player(world, block, pos, experience, params, None);
++}
++
++pub(crate) fn drop_loot_for_player(
++    world: &Arc<World>,
++    block: &Block,
++    pos: &BlockPos,
++    experience: bool,
++    params: &LootContextParameters,
++    player: Option<&Arc<Player>>,
++) {
+     if let Some(loot_table) = block.loot_table.and_then(|key| world.get_loot_table(key)) {
+         let seed: i64 = rand::random();
+         let params = LootContextParameters {
+             world: Some(world),
+@@ -483,9 +494,9 @@
+         if !items.is_empty() {
+             let mut event = crate::plugin::block::block_drop_item::BlockDropItemEvent {
+                 block_pos: *pos,
+                 world: world.clone(),
+-                player: None,
++                player: player.cloned(),
+                 items,
+                 cancelled: false,
+             };
+             if let Some(server) = world.server.upgrade() {
+diff --git a/crates/pumpkin-core/src/world/mod.rs b/crates/pumpkin-core/src/world/mod.rs
+--- a/crates/pumpkin-core/src/world/mod.rs
++++ b/crates/pumpkin-core/src/world/mod.rs
+@@ -5763,7 +5763,7 @@
+                 killed_by_player: Some(cause.is_some()),
+                 ..Default::default()
+             };
+-            crate::block::drop_loot(self, broken_block, position, true, &params);
++            crate::block::drop_loot_for_player(self, broken_block, position, true, &params, cause);
+         }
+ 
+         let new_state_id = if *self.get_fluid(position) == Fluid::WATER {
+diff --git a/crates/pumpkin-wasm-host-v0_1/src/events/block.rs b/crates/pumpkin-wasm-host-v0_1/src/events/block.rs
+--- a/crates/pumpkin-wasm-host-v0_1/src/events/block.rs
++++ b/crates/pumpkin-wasm-host-v0_1/src/events/block.rs
+@@ -825,11 +825,18 @@
+     }
+ 
+     fn apply_wasm_event(&mut self, event: Event, state: &mut PluginHostState) {
+-        cleanup_event(&event, state);
+-        if let Event::BlockDropItemEvent(data) = event {
+-            self.cancelled = data.cancelled;
+-        }
++        if let Event::BlockDropItemEvent(data) = &event {
++            self.cancelled = data.cancelled;
++            let items = data.items.iter().map(|item| {
++                let stack = state.get(item).ok()?;
++                Some(stack.try_lock().ok()?.clone())
++            });
++            if let Some(items) = items.collect::<Option<Vec<_>>>() {
++                self.items = items;
++            }
++        }
++        cleanup_event(&event, state);
+     }
+ 
+     fn from_wasm_event(event: Event, _state: &mut PluginHostState) -> Self {
+         match event {
+diff --git a/crates/pumpkin-wasm-host-v0_1/src/item_stack.rs b/crates/pumpkin-wasm-host-v0_1/src/item_stack.rs
+--- a/crates/pumpkin-wasm-host-v0_1/src/item_stack.rs
++++ b/crates/pumpkin-wasm-host-v0_1/src/item_stack.rs
+@@ -119,17 +119,5 @@
+     async fn get_max_count(&mut self, res: Resource<ItemStackHandle>) -> wasmtime::Result<u8> {
+         let stack = self.get(&res)?;
+         let stack = stack.lock().await;
+-        // Search in components for MaxStackSize
+-        if let Some((_, data)) = stack
+-            .item
+-            .components
+-            .iter()
+-            .find(|(id, _)| *id == DataComponent::MaxStackSize)
+-            && let Some(max_size) = data
+-                .as_any()
+-                .downcast_ref::<pumpkin_data::data_component_impl::MaxStackSizeImpl>()
+-        {
+-            return Ok(max_size.size);
+-        }
+-        Ok(64) // Default
++        Ok(stack.get_max_stack_size())
+     }

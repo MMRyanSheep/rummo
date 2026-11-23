@@ -1,3 +1,4 @@
+pub(crate) mod drop_multiplier_service;
 mod effects;
 
 use std::sync::Arc;

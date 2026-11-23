@@ -4,7 +4,7 @@ pub mod skills;
 mod storage;
 mod ui;
 
-use events::{mining_event::MiningEvent, player_join_event, player_leave_event};
+use events::{block_drop_item_event, mining_event::MiningEvent, player_join_event, player_leave_event};
 use pumpkin_plugin_api::permissions::FS_WRITE_DATA;
 use pumpkin_plugin_api::{Context, Plugin, PluginMetadata, Result};
 use skills::{mining, skill_manager::SkillManager};
@@ -42,6 +42,7 @@ impl Plugin for Rummo {
         player_leave_event::register(&context, boss_bars.clone())?;
         mining::register(&context, mining_effects)?;
         mining_event.register(&context)?;
+        block_drop_item_event::register(&context)?;
         bossbar_scheduler::register(&context, &boss_bars);
         info!("rummo loaded");
         Ok(())

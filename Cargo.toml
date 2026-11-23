@@ -14,6 +14,7 @@ default-members = ["tools/run-server"]
 crate-type = ["cdylib"]
 
 [dependencies]
+fastrand = "2"
 pumpkin-plugin-api = "0.2.1"
 redb = "4.3"
 serde = { version = "1", features = ["derive"] }

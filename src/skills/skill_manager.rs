@@ -43,6 +43,29 @@ pub struct SkillInfo {
     pub required_experience: Option<u32>,
 }
 
+/// Mutually exclusive drop chances as percentages.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DropProbabilities {
+    pub normal: u8,
+    pub double: u8,
+    pub triple: u8,
+}
+
+impl DropProbabilities {
+    pub(crate) const TOTAL: u8 = 100;
+
+    fn for_mining_level(level: u32) -> Self {
+        let total = u32::from(Self::TOTAL);
+        let triple = level.saturating_mul(5).min(total);
+        let double = level.saturating_mul(15).min(total - triple);
+        Self {
+            normal: (total - triple - double) as u8,
+            double: double as u8,
+            triple: triple as u8,
+        }
+    }
+}
+
 pub struct SkillManager {
     boss_bars: Arc<BossBarManager>,
     config: ExperienceConfig,
@@ -68,6 +91,13 @@ impl SkillManager {
     pub fn getSkill(player: &Player, skill_type: SkillType) -> Result<SkillInfo> {
         let key = skill_key(player, skill_type);
         with_manager(|manager| manager.info(key, manager.storage.progress(key)))
+    }
+
+    pub fn mining_drop_probabilities(player: &Player) -> Result<DropProbabilities> {
+        let key = skill_key(player, SkillType::Mining);
+        with_manager(|manager| {
+            DropProbabilities::for_mining_level(manager.storage.progress(key).level)
+        })
     }
 
     pub(crate) fn initialize(
@@ -230,6 +260,29 @@ impl ExperienceConfig {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn mining_drop_probabilities_give_triple_priority() {
+        for (level, normal, double, triple) in [
+            (0, 100, 0, 0),
+            (1, 80, 15, 5),
+            (4, 20, 60, 20),
+            (5, 0, 75, 25),
+            (6, 0, 70, 30),
+            (19, 0, 5, 95),
+            (20, 0, 0, 100),
+            (u32::MAX, 0, 0, 100),
+        ] {
+            assert_eq!(
+                DropProbabilities::for_mining_level(level),
+                DropProbabilities {
+                    normal,
+                    double,
+                    triple,
+                },
+            );
+        }
+    }
 
     #[test]
     fn persists_level_and_experience_on_flush_and_shutdown() {
