@@ -1,7 +1,2 @@
 [alias]
 build-plugin = "build --package rummo --lib --target wasm32-wasip2"
-
-[http]
-proxy = "http://127.0.0.1:7897"
-[https]
-proxy = "http://127.0.0.1:7897"

@@ -71,7 +71,7 @@ Follow `skills/mining/effects.rs::MiningEffects::load`: embed `config/<name>.tom
 - Player-facing text is Chinese; log messages, errors and code comments are English.
 
 ### Style
-
+- Do not make simple things complicated: If it's not obvious, it's not simple.
 - Copy the closest existing code: how it registers, handles errors and orders imports (std, external crates, then `crate`/`super`).
 - Name magic numbers as constants (see `FLUSH_INTERVAL_TICKS`, `HIDE_AFTER`). Tick values are written as `20 * seconds`.
 - Keep changes as small as the task. No abstractions, traits, config options or feature flags for hypothetical future use; three similar lines are fine.

@@ -15,18 +15,21 @@ static MANAGER: Mutex<Option<SkillManager>> = Mutex::new(None);
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SkillType {
     Mining,
+    Axes,
 }
 
 impl SkillType {
     pub const fn id(self) -> &'static str {
         match self {
             Self::Mining => "mining",
+            Self::Axes => "axes",
         }
     }
 
     pub(crate) fn from_id(id: &str) -> Option<Self> {
         match id {
             "mining" => Some(Self::Mining),
+            "axes" => Some(Self::Axes),
             _ => None,
         }
     }
@@ -34,6 +37,7 @@ impl SkillType {
     pub(crate) const fn display_name(self) -> &'static str {
         match self {
             Self::Mining => "挖矿",
+            Self::Axes => "斧技",
         }
     }
 }
@@ -386,17 +390,26 @@ mod tests {
             }
         );
 
+        let axes_key = (1, SkillType::Axes);
+        manager.update_experience(axes_key, |_| 105);
         manager.update_experience(key, |_| 121 + 110);
         let skill = manager.update_level(key, |_| 1);
         assert_eq!((skill.level, skill.experience), (1, 99));
         *MANAGER.lock().unwrap() = Some(manager);
         SkillManager::shutdown().unwrap();
-        let saved = SkillStorage::open(&directory).unwrap().progress(key);
+        let storage = SkillStorage::open(&directory).unwrap();
         assert_eq!(
-            saved,
+            storage.progress(key),
             Progress {
                 level: 1,
                 experience: 99
+            }
+        );
+        assert_eq!(
+            storage.progress(axes_key),
+            Progress {
+                level: 2,
+                experience: 5
             }
         );
 
