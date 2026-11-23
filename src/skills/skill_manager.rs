@@ -8,6 +8,7 @@ use crate::storage::{Progress, SkillKey, SkillStorage};
 use crate::ui::bossbar_manager::BossBarManager;
 
 static MANAGER: Mutex<Option<SkillManager>> = Mutex::new(None);
+type LevelChangeHandler = Arc<dyn Fn(&Player, SkillType) + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SkillType {
@@ -54,21 +55,22 @@ pub struct SkillManager {
     boss_bars: Arc<BossBarManager>,
     config: ExperienceConfig,
     storage: Arc<SkillStorage>,
+    level_change_handler: Option<LevelChangeHandler>,
 }
 
 impl SkillManager {
     /// Adds experience, carrying any surplus across levels.
     pub fn add_exp(player: &Player, skill_type: SkillType, exp: u32) -> Result<SkillInfo> {
-        let key = skill_key(player, skill_type);
-        with_manager(|manager| {
+        Self::update_skill(player, skill_type, |manager, key| {
             manager.update_experience(key, |current| u64::from(current) + u64::from(exp))
         })
     }
 
     /// Replaces the current level's progress. Surplus experience advances levels.
     pub fn set_exp(player: &Player, skill_type: SkillType, exp: u32) -> Result<SkillInfo> {
-        let key = skill_key(player, skill_type);
-        with_manager(|manager| manager.update_experience(key, |_| u64::from(exp)))
+        Self::update_skill(player, skill_type, |manager, key| {
+            manager.update_experience(key, |_| u64::from(exp))
+        })
     }
 
     /// Sets the level and keeps as much current progress as the target level allows.
@@ -80,8 +82,9 @@ impl SkillManager {
         if level == 0 {
             return Err("Skill level must be at least 1".into());
         }
-        let key = skill_key(player, skill_type);
-        with_manager(|manager| manager.update_level(key, |_| level))
+        Self::update_skill(player, skill_type, |manager, key| {
+            manager.update_level(key, |_| level)
+        })
     }
 
     /// Adds levels up to the maximum while preserving current progress.
@@ -90,8 +93,9 @@ impl SkillManager {
         skill_type: SkillType,
         levels: u32,
     ) -> Result<SkillInfo> {
-        let key = skill_key(player, skill_type);
-        with_manager(|manager| manager.update_level(key, |current| current.saturating_add(levels)))
+        Self::update_skill(player, skill_type, |manager, key| {
+            manager.update_level(key, |current| current.saturating_add(levels))
+        })
     }
 
     pub fn get_skill(player: &Player, skill_type: SkillType) -> Result<SkillInfo> {
@@ -106,6 +110,15 @@ impl SkillManager {
         let storage = Arc::clone(&manager.storage);
         *MANAGER.lock().expect("skill manager lock") = Some(manager);
         storage.schedule_autosave(context);
+        Ok(())
+    }
+
+    pub(crate) fn set_level_change_handler(handler: LevelChangeHandler) -> Result<()> {
+        let mut manager = MANAGER.lock().expect("skill manager lock");
+        let manager = manager
+            .as_mut()
+            .ok_or_else(|| "Skill manager is not loaded".to_owned())?;
+        manager.level_change_handler = Some(handler);
         Ok(())
     }
 
@@ -124,17 +137,43 @@ impl SkillManager {
             boss_bars,
             config,
             storage,
+            level_change_handler: None,
         })
     }
 
-    fn update_experience(&self, key: SkillKey, experience: impl FnOnce(u32) -> u64) -> SkillInfo {
+    fn update_skill(
+        player: &Player,
+        skill_type: SkillType,
+        update: impl FnOnce(&Self, SkillKey) -> (SkillInfo, bool),
+    ) -> Result<SkillInfo> {
+        let key = skill_key(player, skill_type);
+        let (info, handler) = with_manager(|manager| {
+            let (info, level_changed) = update(manager, key);
+            let handler = if level_changed {
+                manager.level_change_handler.clone()
+            } else {
+                None
+            };
+            (info, handler)
+        })?;
+        if let Some(handler) = handler {
+            handler(player, skill_type);
+        }
+        Ok(info)
+    }
+
+    fn update_experience(
+        &self,
+        key: SkillKey,
+        experience: impl FnOnce(u32) -> u64,
+    ) -> (SkillInfo, bool) {
         self.update_progress(key, |current| {
             self.config
                 .advance(current.level, experience(current.experience))
         })
     }
 
-    fn update_level(&self, key: SkillKey, level: impl FnOnce(u32) -> u32) -> SkillInfo {
+    fn update_level(&self, key: SkillKey, level: impl FnOnce(u32) -> u32) -> (SkillInfo, bool) {
         self.update_progress(key, |current| {
             self.config
                 .progress_at_level(level(current.level), current.experience)
@@ -145,14 +184,14 @@ impl SkillManager {
         &self,
         key: SkillKey,
         update: impl FnOnce(Progress) -> Progress,
-    ) -> SkillInfo {
+    ) -> (SkillInfo, bool) {
         let previous = self.storage.progress(key);
         let progress = self.storage.update(key, update);
         let info = self.info(key, progress);
         if progress != previous {
             self.boss_bars.experience_updated(key.1, info);
         }
-        info
+        (info, progress.level != previous.level)
     }
 
     fn info(&self, (player_uuid, skill_type): SkillKey, progress: Progress) -> SkillInfo {
@@ -205,9 +244,10 @@ mod tests {
         let manager = SkillManager::open(&directory, boss_bars).unwrap();
         let key = (1, SkillType::Mining);
 
-        let skill = manager.update_experience(key, |_| 215);
+        let (skill, level_changed) = manager.update_experience(key, |_| 215);
         assert_eq!((skill.level, skill.experience), (3, 5));
         assert_eq!(skill.required_experience, Some(121));
+        assert!(level_changed);
         let saved = SkillStorage::open(&directory).unwrap().progress(key);
         assert_eq!(saved, Progress::default());
 
@@ -222,10 +262,13 @@ mod tests {
         );
 
         let axes_key = (1, SkillType::Axes);
+        let (_, level_changed) = manager.update_experience(axes_key, |_| 4);
+        assert!(!level_changed);
         manager.update_experience(axes_key, |_| 105);
         manager.update_experience(key, |_| 121 + 110);
-        let skill = manager.update_level(key, |_| 1);
+        let (skill, level_changed) = manager.update_level(key, |_| 1);
         assert_eq!((skill.level, skill.experience), (1, 99));
+        assert!(level_changed);
         *MANAGER.lock().unwrap() = Some(manager);
         SkillManager::shutdown().unwrap();
         let storage = SkillStorage::open(&directory).unwrap();

@@ -39,8 +39,7 @@ impl EventHandler<PlayerJoinEvent> for PlayerJoin {
 
         let player = &data.player;
         self.boss_bars.add_player(player);
-        self.mining_effects
-            .apply_speed(player, player.get_experience_level());
+        self.mining_effects.apply_speed(player);
         data
     }
 }

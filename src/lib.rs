@@ -51,9 +51,9 @@ impl Plugin for Rummo {
         let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
         let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml"))?);
         SkillManager::initialize(&context, boss_bars.clone())?;
-        player_join_event::register(&context, mining_effects.clone(), boss_bars.clone())?;
+        mining::register(mining_effects.clone())?;
+        player_join_event::register(&context, mining_effects, boss_bars.clone())?;
         player_leave_event::register(&context, boss_bars.clone())?;
-        mining::register(&context, mining_effects)?;
         mining_event.register(&context)?;
         attact_event::register(&context)?;
         block_drop_item_event::register(&context)?;
