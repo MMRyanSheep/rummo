@@ -2,31 +2,32 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use pumpkin_plugin_api::{Context, Player, Result};
-use serde::Deserialize;
 
-use super::mining::MiningEffects;
-use crate::config;
+use super::experience::ExperienceConfig;
 use crate::storage::{Progress, SkillKey, SkillStorage};
 use crate::ui::bossbar_manager::BossBarManager;
 
-const DEFAULT_EXPERIENCE: &str = include_str!("../../config/experience.toml");
 static MANAGER: Mutex<Option<SkillManager>> = Mutex::new(None);
+type LevelChangeHandler = Arc<dyn Fn(&Player, SkillType) + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SkillType {
     Mining,
+    Axes,
 }
 
 impl SkillType {
     pub const fn id(self) -> &'static str {
         match self {
             Self::Mining => "mining",
+            Self::Axes => "axes",
         }
     }
 
     pub(crate) fn from_id(id: &str) -> Option<Self> {
         match id {
             "mining" => Some(Self::Mining),
+            "axes" => Some(Self::Axes),
             _ => None,
         }
     }
@@ -34,6 +35,7 @@ impl SkillType {
     pub(crate) const fn display_name(self) -> &'static str {
         match self {
             Self::Mining => "挖矿",
+            Self::Axes => "斧技",
         }
     }
 }
@@ -49,48 +51,26 @@ pub struct SkillInfo {
     pub required_experience: Option<u32>,
 }
 
-/// Mutually exclusive drop chances as percentages.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DropProbabilities {
-    pub normal: u8,
-    pub double: u8,
-    pub triple: u8,
-}
-
-impl DropProbabilities {
-    pub(crate) const TOTAL: u8 = 100;
-
-    fn for_mining_level(level: u32) -> Self {
-        let total = u32::from(Self::TOTAL);
-        let triple = level.saturating_mul(5).min(total);
-        let double = level.saturating_mul(15).min(total - triple);
-        Self {
-            normal: (total - triple - double) as u8,
-            double: double as u8,
-            triple: triple as u8,
-        }
-    }
-}
-
 pub struct SkillManager {
     boss_bars: Arc<BossBarManager>,
     config: ExperienceConfig,
     storage: Arc<SkillStorage>,
+    level_change_handler: Option<LevelChangeHandler>,
 }
 
 impl SkillManager {
     /// Adds experience, carrying any surplus across levels.
     pub fn add_exp(player: &Player, skill_type: SkillType, exp: u32) -> Result<SkillInfo> {
-        let key = skill_key(player, skill_type);
-        with_manager(|manager| {
+        Self::update_skill(player, skill_type, |manager, key| {
             manager.update_experience(key, |current| u64::from(current) + u64::from(exp))
         })
     }
 
     /// Replaces the current level's progress. Surplus experience advances levels.
     pub fn set_exp(player: &Player, skill_type: SkillType, exp: u32) -> Result<SkillInfo> {
-        let key = skill_key(player, skill_type);
-        with_manager(|manager| manager.update_experience(key, |_| u64::from(exp)))
+        Self::update_skill(player, skill_type, |manager, key| {
+            manager.update_experience(key, |_| u64::from(exp))
+        })
     }
 
     /// Sets the level and keeps as much current progress as the target level allows.
@@ -102,8 +82,9 @@ impl SkillManager {
         if level == 0 {
             return Err("Skill level must be at least 1".into());
         }
-        let key = skill_key(player, skill_type);
-        with_manager(|manager| manager.update_level(key, |_| level))
+        Self::update_skill(player, skill_type, |manager, key| {
+            manager.update_level(key, |_| level)
+        })
     }
 
     /// Adds levels up to the maximum while preserving current progress.
@@ -112,8 +93,9 @@ impl SkillManager {
         skill_type: SkillType,
         levels: u32,
     ) -> Result<SkillInfo> {
-        let key = skill_key(player, skill_type);
-        with_manager(|manager| manager.update_level(key, |current| current.saturating_add(levels)))
+        Self::update_skill(player, skill_type, |manager, key| {
+            manager.update_level(key, |current| current.saturating_add(levels))
+        })
     }
 
     pub fn get_skill(player: &Player, skill_type: SkillType) -> Result<SkillInfo> {
@@ -121,25 +103,23 @@ impl SkillManager {
         with_manager(|manager| manager.info(key, manager.storage.progress(key)))
     }
 
-    pub fn mining_drop_probabilities(player: &Player) -> Result<DropProbabilities> {
-        let key = skill_key(player, SkillType::Mining);
-        with_manager(|manager| {
-            DropProbabilities::for_mining_level(manager.storage.progress(key).level)
-        })
-    }
-
-    pub(crate) fn initialize(
-        context: &Context,
-    ) -> Result<(Arc<MiningEffects>, Arc<BossBarManager>)> {
+    pub(crate) fn initialize(context: &Context, boss_bars: Arc<BossBarManager>) -> Result<()> {
         let data_folder = context.get_data_folder();
         let directory = Path::new(&data_folder);
-        let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
-        let manager = Self::open(directory)?;
-        let boss_bars = Arc::clone(&manager.boss_bars);
+        let manager = Self::open(directory, boss_bars)?;
         let storage = Arc::clone(&manager.storage);
         *MANAGER.lock().expect("skill manager lock") = Some(manager);
         storage.schedule_autosave(context);
-        Ok((mining_effects, boss_bars))
+        Ok(())
+    }
+
+    pub(crate) fn set_level_change_handler(handler: LevelChangeHandler) -> Result<()> {
+        let mut manager = MANAGER.lock().expect("skill manager lock");
+        let manager = manager
+            .as_mut()
+            .ok_or_else(|| "Skill manager is not loaded".to_owned())?;
+        manager.level_change_handler = Some(handler);
+        Ok(())
     }
 
     pub(crate) fn shutdown() -> Result<()> {
@@ -150,25 +130,50 @@ impl SkillManager {
         }
         Ok(())
     }
-    fn open(directory: &Path) -> Result<Self> {
-        let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml"))?);
+    fn open(directory: &Path, boss_bars: Arc<BossBarManager>) -> Result<Self> {
         let config = ExperienceConfig::load(&directory.join("experience.toml"))?;
         let storage = Arc::new(SkillStorage::open(directory)?);
         Ok(Self {
             boss_bars,
             config,
             storage,
+            level_change_handler: None,
         })
     }
 
-    fn update_experience(&self, key: SkillKey, experience: impl FnOnce(u32) -> u64) -> SkillInfo {
+    fn update_skill(
+        player: &Player,
+        skill_type: SkillType,
+        update: impl FnOnce(&Self, SkillKey) -> (SkillInfo, bool),
+    ) -> Result<SkillInfo> {
+        let key = skill_key(player, skill_type);
+        let (info, handler) = with_manager(|manager| {
+            let (info, level_changed) = update(manager, key);
+            let handler = if level_changed {
+                manager.level_change_handler.clone()
+            } else {
+                None
+            };
+            (info, handler)
+        })?;
+        if let Some(handler) = handler {
+            handler(player, skill_type);
+        }
+        Ok(info)
+    }
+
+    fn update_experience(
+        &self,
+        key: SkillKey,
+        experience: impl FnOnce(u32) -> u64,
+    ) -> (SkillInfo, bool) {
         self.update_progress(key, |current| {
             self.config
                 .advance(current.level, experience(current.experience))
         })
     }
 
-    fn update_level(&self, key: SkillKey, level: impl FnOnce(u32) -> u32) -> SkillInfo {
+    fn update_level(&self, key: SkillKey, level: impl FnOnce(u32) -> u32) -> (SkillInfo, bool) {
         self.update_progress(key, |current| {
             self.config
                 .progress_at_level(level(current.level), current.experience)
@@ -179,14 +184,14 @@ impl SkillManager {
         &self,
         key: SkillKey,
         update: impl FnOnce(Progress) -> Progress,
-    ) -> SkillInfo {
+    ) -> (SkillInfo, bool) {
         let previous = self.storage.progress(key);
         let progress = self.storage.update(key, update);
         let info = self.info(key, progress);
         if progress != previous {
             self.boss_bars.experience_updated(key.1, info);
         }
-        info
+        (info, progress.level != previous.level)
     }
 
     fn info(&self, (player_uuid, skill_type): SkillKey, progress: Progress) -> SkillInfo {
@@ -219,144 +224,12 @@ fn with_manager<T>(use_manager: impl FnOnce(&SkillManager) -> T) -> Result<T> {
         .ok_or_else(|| "Skill manager is not loaded".into())
 }
 
-#[derive(Deserialize)]
-#[serde(default)]
-struct ExperienceConfig {
-    base_experience: u32,
-    level_multiplier: f64,
-}
-
-impl Default for ExperienceConfig {
-    fn default() -> Self {
-        Self {
-            base_experience: 100,
-            level_multiplier: 1.1,
-        }
-    }
-}
-
-impl ExperienceConfig {
-    fn load(path: &Path) -> Result<Self> {
-        let config: Self = config::load(path, DEFAULT_EXPERIENCE)?;
-        if config.base_experience == 0
-            || !config.level_multiplier.is_finite()
-            || config.level_multiplier < 1.0
-        {
-            return Err(format!(
-                "{} requires a positive base_experience and a finite level_multiplier of at least 1.0",
-                path.display()
-            ));
-        }
-        Ok(config)
-    }
-
-    fn required_experience(&self, level: u32) -> u32 {
-        (f64::from(self.base_experience) * self.level_multiplier.powf(f64::from(level - 1))).round()
-            as u32
-    }
-
-    fn progress_at_level(&self, level: u32, experience: u32) -> Progress {
-        let experience = if level == u32::MAX {
-            experience
-        } else {
-            experience.min(self.required_experience(level) - 1)
-        };
-        Progress { level, experience }
-    }
-
-    fn advance(&self, mut level: u32, mut experience: u64) -> Progress {
-        while level < u32::MAX {
-            let required = self.required_experience(level);
-            let affordable_levels =
-                (experience / u64::from(required)).min(u64::from(u32::MAX - level)) as u32;
-            if affordable_levels == 0 {
-                break;
-            }
-
-            // Rounding can give many consecutive levels the same cost.
-            let mut low = 1;
-            let mut high = affordable_levels;
-            while low < high {
-                let mid = low + (high - low).div_ceil(2);
-                if self.required_experience(level + (mid - 1)) == required {
-                    low = mid;
-                } else {
-                    high = mid - 1;
-                }
-            }
-            level += low;
-            experience -= u64::from(low) * u64::from(required);
-        }
-        Progress {
-            level,
-            experience: experience.min(u64::from(u32::MAX)) as u32,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
-
-    #[test]
-    fn direct_level_changes_cap_experience_without_advancing() {
-        let config = ExperienceConfig::default();
-
-        assert_eq!(
-            config.progress_at_level(1, 120),
-            Progress {
-                level: 1,
-                experience: 99
-            }
-        );
-        assert_eq!(
-            config.progress_at_level(1, 100),
-            Progress {
-                level: 1,
-                experience: 99
-            }
-        );
-        assert_eq!(
-            config.progress_at_level(3, 99),
-            Progress {
-                level: 3,
-                experience: 99
-            }
-        );
-        assert_eq!(
-            config.progress_at_level(u32::MAX, u32::MAX),
-            Progress {
-                level: u32::MAX,
-                experience: u32::MAX
-            }
-        );
-    }
-
-    #[test]
-    fn mining_drop_probabilities_give_triple_priority() {
-        for (level, normal, double, triple) in [
-            (0, 100, 0, 0),
-            (1, 80, 15, 5),
-            (4, 20, 60, 20),
-            (5, 0, 75, 25),
-            (6, 0, 70, 30),
-            (19, 0, 5, 95),
-            (20, 0, 0, 100),
-            (u32::MAX, 0, 0, 100),
-        ] {
-            assert_eq!(
-                DropProbabilities::for_mining_level(level),
-                DropProbabilities {
-                    normal,
-                    double,
-                    triple,
-                },
-            );
-        }
-    }
 
     #[test]
     fn persists_level_and_experience_on_flush_and_shutdown() {
@@ -367,12 +240,14 @@ mod tests {
             timestamp.as_nanos()
         ));
         fs::create_dir(&directory).unwrap();
-        let manager = SkillManager::open(&directory).unwrap();
+        let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml")).unwrap());
+        let manager = SkillManager::open(&directory, boss_bars).unwrap();
         let key = (1, SkillType::Mining);
 
-        let skill = manager.update_experience(key, |_| 215);
+        let (skill, level_changed) = manager.update_experience(key, |_| 215);
         assert_eq!((skill.level, skill.experience), (3, 5));
         assert_eq!(skill.required_experience, Some(121));
+        assert!(level_changed);
         let saved = SkillStorage::open(&directory).unwrap().progress(key);
         assert_eq!(saved, Progress::default());
 
@@ -386,17 +261,29 @@ mod tests {
             }
         );
 
+        let axes_key = (1, SkillType::Axes);
+        let (_, level_changed) = manager.update_experience(axes_key, |_| 4);
+        assert!(!level_changed);
+        manager.update_experience(axes_key, |_| 105);
         manager.update_experience(key, |_| 121 + 110);
-        let skill = manager.update_level(key, |_| 1);
+        let (skill, level_changed) = manager.update_level(key, |_| 1);
         assert_eq!((skill.level, skill.experience), (1, 99));
+        assert!(level_changed);
         *MANAGER.lock().unwrap() = Some(manager);
         SkillManager::shutdown().unwrap();
-        let saved = SkillStorage::open(&directory).unwrap().progress(key);
+        let storage = SkillStorage::open(&directory).unwrap();
         assert_eq!(
-            saved,
+            storage.progress(key),
             Progress {
                 level: 1,
                 experience: 99
+            }
+        );
+        assert_eq!(
+            storage.progress(axes_key),
+            Progress {
+                level: 2,
+                experience: 5
             }
         );
 

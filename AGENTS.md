@@ -28,7 +28,7 @@ Before you say a change is done, `cargo fmt --all`, the clippy command, `cargo t
 - `src/lib.rs`: plugin entry. `on_load` wires everything together in order; `on_unload` saves data.
 - `src/commands.rs`: `/rummo` command and its permission node.
 - `src/events/`: one file per Pumpkin event handler (`*_event.rs`). `interact_event.rs` is an empty placeholder.
-- `src/skills/skill_manager.rs`: `SkillType`, levelling maths (`ExperienceConfig`) and the global `SkillManager` (`addExp` / `setExp` / `getSkill`).
+- `src/skills/skill_manager.rs`: `SkillType`, levelling maths (`ExperienceConfig`) and the global `SkillManager` (`add_exp` / `set_exp` / `getSkill`).
 - `src/skills/<skill>/`: per-skill gameplay effects (e.g. `mining/effects.rs` changes block-break speed).
 - `src/storage/`: `cache.rs` is the in-memory cache with pending writes; `sqlite.rs` is actually **redb** (`skills.redb`), not SQLite. Autosave every 30 s plus a final save on unload.
 - `src/ui/`: per-player boss bar showing skill progress (`manager` holds state, `scheduler` runs every 4 ticks, `render` builds the text).
@@ -42,9 +42,9 @@ Data flow for mining: `BlockBreakEvent` → `MiningEvent` looks up XP from `mini
 ### Add a new skill
 
 1. Add a variant to `SkillType` and to both `id()` and `from_id()`. The id is stored in the database: never rename or reuse an existing id.
-2. Add its display name in `ui/bossbar_render.rs::presentation`.
+2. Add its display name in `SkillType::display_name()`.
 3. Put gameplay effects in `src/skills/<skill>/`, modelled on `mining/`, and register them in `lib.rs::on_load`.
-4. Award XP from an event handler with `SkillManager::addExp`.
+4. Award XP from an event handler with `SkillManager::add_exp`.
 
 ### Add an event handler
 
@@ -71,7 +71,7 @@ Follow `skills/mining/effects.rs::MiningEffects::load`: embed `config/<name>.tom
 - Player-facing text is Chinese; log messages, errors and code comments are English.
 
 ### Style
-
+- Do not make simple things complicated: If it's not obvious, it's not simple.
 - Copy the closest existing code: how it registers, handles errors and orders imports (std, external crates, then `crate`/`super`).
 - Name magic numbers as constants (see `FLUSH_INTERVAL_TICKS`, `HIDE_AFTER`). Tick values are written as `20 * seconds`.
 - Keep changes as small as the task. No abstractions, traits, config options or feature flags for hypothetical future use; three similar lines are fine.

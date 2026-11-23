@@ -1,4 +1,6 @@
-use crate::skills::skill_manager::DropProbabilities;
+use pumpkin_plugin_api::{Player, Result};
+
+use crate::skills::skill_manager::{SkillManager, SkillType};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DropMultiplier {
@@ -7,8 +9,34 @@ pub(crate) enum DropMultiplier {
     Triple = 3,
 }
 
-pub(crate) fn roll(probabilities: DropProbabilities) -> DropMultiplier {
-    classify(probabilities, fastrand::u8(..DropProbabilities::TOTAL))
+/// Mutually exclusive drop chances as percentages.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DropProbabilities {
+    normal: u8,
+    double: u8,
+    triple: u8,
+}
+
+impl DropProbabilities {
+    const TOTAL: u8 = 100;
+
+    fn for_mining_level(level: u32) -> Self {
+        let total = u32::from(Self::TOTAL);
+        let triple = level.saturating_mul(5).min(total);
+        let double = level.saturating_mul(15).min(total - triple);
+        Self {
+            normal: (total - triple - double) as u8,
+            double: double as u8,
+            triple: triple as u8,
+        }
+    }
+}
+
+pub(crate) fn roll(player: &Player) -> Result<DropMultiplier> {
+    let level = SkillManager::get_skill(player, SkillType::Mining)?.level;
+    let probabilities = DropProbabilities::for_mining_level(level);
+    let total = probabilities.triple + probabilities.double + probabilities.normal;
+    Ok(classify(probabilities, fastrand::u8(..total)))
 }
 
 fn classify(probabilities: DropProbabilities, draw: u8) -> DropMultiplier {
@@ -24,6 +52,29 @@ fn classify(probabilities: DropProbabilities, draw: u8) -> DropMultiplier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mining_drop_probabilities_give_triple_priority() {
+        for (level, normal, double, triple) in [
+            (0, 100, 0, 0),
+            (1, 80, 15, 5),
+            (4, 20, 60, 20),
+            (5, 0, 75, 25),
+            (6, 0, 70, 30),
+            (19, 0, 5, 95),
+            (20, 0, 0, 100),
+            (u32::MAX, 0, 0, 100),
+        ] {
+            assert_eq!(
+                DropProbabilities::for_mining_level(level),
+                DropProbabilities {
+                    normal,
+                    double,
+                    triple,
+                },
+            );
+        }
+    }
 
     #[test]
     fn each_draw_belongs_to_one_outcome() {

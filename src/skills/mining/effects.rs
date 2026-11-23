@@ -4,6 +4,7 @@ use pumpkin_plugin_api::{Attribute, AttributeModifier, ModifierOperation, Player
 use serde::Deserialize;
 
 use crate::config;
+use crate::skills::skill_manager::{SkillManager, SkillType};
 
 const DEFAULT_CONFIG: &str = include_str!("../../../config/mining.toml");
 const SPEED_MODIFIER_ID: &str = "rummo:mining_speed";
@@ -38,13 +39,19 @@ impl MiningEffects {
         Ok(Self { config })
     }
 
-    pub(crate) fn apply_speed(&self, player: &Player, experience_level: i32) {
+    pub(crate) fn apply_speed(&self, player: &Player) {
         let Some(living) = player.as_entity().as_living() else {
             return;
         };
+        let level = match SkillManager::get_skill(player, SkillType::Mining) {
+            Ok(skill) => skill.level,
+            Err(error) => {
+                tracing::error!(%error, "Failed to read mining level for speed bonus");
+                return;
+            }
+        };
         // The built-in attribute has a maximum value of 1024.
-        let bonus =
-            (f64::from(experience_level.max(0)) * self.config.speed_bonus_per_level).min(1023.0);
+        let bonus = (f64::from(level) * self.config.speed_bonus_per_level).min(1023.0);
         if bonus == 0.0 {
             living.remove_attribute_modifier(Attribute::BlockBreakSpeed, SPEED_MODIFIER_ID);
         } else {

@@ -51,3 +51,25 @@ fn format_xp(experience: u32) -> String {
     }
     formatted
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn axes_boss_bar_shows_whole_experience() {
+        let skill = SkillType::Axes;
+        let info = SkillInfo {
+            player_uuid: 1,
+            skill_id: skill.id(),
+            level: 2,
+            experience: 55,
+            required_experience: Some(110),
+        };
+
+        assert_eq!(
+            presentation(skill, info),
+            ("斧技 Lv.2 — 55 / 110 XP".into(), 0.5),
+        );
+    }
+}

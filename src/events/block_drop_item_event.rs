@@ -2,7 +2,6 @@ use pumpkin_plugin_api::events::{BlockDropItemEvent, EventData, EventHandler, Ev
 use pumpkin_plugin_api::{Context, ItemStack, Result, Server};
 
 use crate::skills::mining::drop_multiplier_service::{self, DropMultiplier};
-use crate::skills::skill_manager::SkillManager;
 
 // Pumpkin 0.2.2 needs patches/pumpkin-block-drop-item.patch to pass the player and apply item edits.
 pub(crate) fn register(context: &Context) -> Result<()> {
@@ -24,14 +23,13 @@ impl EventHandler<BlockDropItemEvent> for BlockDropItems {
         let Some(player) = data.player.as_ref() else {
             return data;
         };
-        let probabilities = match SkillManager::mining_drop_probabilities(player) {
-            Ok(probabilities) => probabilities,
+        let multiplier = match drop_multiplier_service::roll(player) {
+            Ok(multiplier) => multiplier,
             Err(error) => {
                 tracing::error!(%error, "Failed to calculate mining drop probabilities");
                 return data;
             }
         };
-        let multiplier = drop_multiplier_service::roll(probabilities);
         if multiplier != DropMultiplier::Normal {
             multiply_stacks(&mut data.items, multiplier);
         }
