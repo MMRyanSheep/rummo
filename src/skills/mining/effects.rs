@@ -1,9 +1,9 @@
-use std::fs;
-use std::io::ErrorKind;
 use std::path::Path;
 
 use pumpkin_plugin_api::{Attribute, AttributeModifier, ModifierOperation, Player, Result};
 use serde::Deserialize;
+
+use crate::config;
 
 const DEFAULT_CONFIG: &str = include_str!("../../../config/mining.toml");
 const SPEED_MODIFIER_ID: &str = "rummo:mining_speed";
@@ -28,17 +28,7 @@ pub(crate) struct MiningEffects {
 
 impl MiningEffects {
     pub(crate) fn load(path: &Path) -> Result<Self> {
-        let contents = match fs::read_to_string(path) {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == ErrorKind::NotFound => {
-                fs::write(path, DEFAULT_CONFIG)
-                    .map_err(|error| format!("Cannot create {}: {error}", path.display()))?;
-                DEFAULT_CONFIG.to_owned()
-            }
-            Err(error) => return Err(format!("Cannot read {}: {error}", path.display())),
-        };
-        let config: MiningConfig = toml::from_str(&contents)
-            .map_err(|error| format!("Cannot parse {}: {error}", path.display()))?;
+        let config: MiningConfig = config::load(path, DEFAULT_CONFIG)?;
         if !config.speed_bonus_per_level.is_finite() || config.speed_bonus_per_level < 0.0 {
             return Err(format!(
                 "{} requires a finite, non-negative speed_bonus_per_level",

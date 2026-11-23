@@ -1,4 +1,5 @@
 mod commands;
+mod config;
 mod events;
 pub mod skills;
 mod storage;

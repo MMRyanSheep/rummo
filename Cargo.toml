@@ -29,8 +29,3 @@ opt-level = 2
 
 [profile.release]
 lto = true
-
-[http]
-proxy = "http://127.0.0.1:7897"
-[https]
-proxy = "http://127.0.0.1:7897"

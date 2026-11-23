@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use std::fs;
-use std::io::ErrorKind;
 use std::path::Path;
 
 use pumpkin_plugin_api::events::{BlockBreakEvent, EventData, EventHandler, EventPriority};
 use pumpkin_plugin_api::{Context, Result, Server};
 
+use crate::config;
 use crate::skills::skill_manager::{SkillManager, SkillType};
 
 const DEFAULT_EXPERIENCE: &str = include_str!("../../config/mining_experience.toml");
@@ -17,17 +16,7 @@ pub(crate) struct MiningEvent {
 impl MiningEvent {
     pub(crate) fn load(context: &Context) -> Result<Self> {
         let path = Path::new(&context.get_data_folder()).join("mining_experience.toml");
-        let contents = match fs::read_to_string(&path) {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == ErrorKind::NotFound => {
-                fs::write(&path, DEFAULT_EXPERIENCE)
-                    .map_err(|error| format!("Cannot create {}: {error}", path.display()))?;
-                DEFAULT_EXPERIENCE.to_owned()
-            }
-            Err(error) => return Err(format!("Cannot read {}: {error}", path.display())),
-        };
-        let rewards: HashMap<String, u32> = toml::from_str(&contents)
-            .map_err(|error| format!("Cannot parse {}: {error}", path.display()))?;
+        let rewards: HashMap<String, u32> = config::load(&path, DEFAULT_EXPERIENCE)?;
         let mut experience = HashMap::with_capacity(rewards.len());
         for (block, exp) in rewards {
             let id = block_id(&block);
@@ -64,11 +53,11 @@ impl EventHandler<BlockBreakEvent> for MiningEvent {
         };
 
         if exp > 0
-            && let Err(error) = SkillManager::addExp(player, SkillType::Mining, exp)
+            && let Err(error) = SkillManager::add_exp(player, SkillType::Mining, exp)
         {
             tracing::error!(block = %data.block, %error, "Failed to add mining experience");
         }
-        return data
+        return data;
     }
 }
 
