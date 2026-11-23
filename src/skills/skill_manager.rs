@@ -2,14 +2,11 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use pumpkin_plugin_api::{Context, Player, Result};
-use serde::Deserialize;
 
-use super::mining::MiningEffects;
-use crate::config;
+use super::experience::ExperienceConfig;
 use crate::storage::{Progress, SkillKey, SkillStorage};
 use crate::ui::bossbar_manager::BossBarManager;
 
-const DEFAULT_EXPERIENCE: &str = include_str!("../../config/experience.toml");
 static MANAGER: Mutex<Option<SkillManager>> = Mutex::new(None);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -102,18 +99,14 @@ impl SkillManager {
         with_manager(|manager| manager.info(key, manager.storage.progress(key)))
     }
 
-    pub(crate) fn initialize(
-        context: &Context,
-    ) -> Result<(Arc<MiningEffects>, Arc<BossBarManager>)> {
+    pub(crate) fn initialize(context: &Context, boss_bars: Arc<BossBarManager>) -> Result<()> {
         let data_folder = context.get_data_folder();
         let directory = Path::new(&data_folder);
-        let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
-        let manager = Self::open(directory)?;
-        let boss_bars = Arc::clone(&manager.boss_bars);
+        let manager = Self::open(directory, boss_bars)?;
         let storage = Arc::clone(&manager.storage);
         *MANAGER.lock().expect("skill manager lock") = Some(manager);
         storage.schedule_autosave(context);
-        Ok((mining_effects, boss_bars))
+        Ok(())
     }
 
     pub(crate) fn shutdown() -> Result<()> {
@@ -124,8 +117,7 @@ impl SkillManager {
         }
         Ok(())
     }
-    fn open(directory: &Path) -> Result<Self> {
-        let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml"))?);
+    fn open(directory: &Path, boss_bars: Arc<BossBarManager>) -> Result<Self> {
         let config = ExperienceConfig::load(&directory.join("experience.toml"))?;
         let storage = Arc::new(SkillStorage::open(directory)?);
         Ok(Self {
@@ -193,121 +185,12 @@ fn with_manager<T>(use_manager: impl FnOnce(&SkillManager) -> T) -> Result<T> {
         .ok_or_else(|| "Skill manager is not loaded".into())
 }
 
-#[derive(Deserialize)]
-#[serde(default)]
-struct ExperienceConfig {
-    base_experience: u32,
-    level_multiplier: f64,
-}
-
-impl Default for ExperienceConfig {
-    fn default() -> Self {
-        Self {
-            base_experience: 100,
-            level_multiplier: 1.1,
-        }
-    }
-}
-
-impl ExperienceConfig {
-    fn load(path: &Path) -> Result<Self> {
-        let config: Self = config::load(path, DEFAULT_EXPERIENCE)?;
-        if config.base_experience == 0
-            || !config.level_multiplier.is_finite()
-            || config.level_multiplier < 1.0
-        {
-            return Err(format!(
-                "{} requires a positive base_experience and a finite level_multiplier of at least 1.0",
-                path.display()
-            ));
-        }
-        Ok(config)
-    }
-
-    fn required_experience(&self, level: u32) -> u32 {
-        (f64::from(self.base_experience) * self.level_multiplier.powf(f64::from(level - 1))).round()
-            as u32
-    }
-
-    fn progress_at_level(&self, level: u32, experience: u32) -> Progress {
-        let experience = if level == u32::MAX {
-            experience
-        } else {
-            experience.min(self.required_experience(level) - 1)
-        };
-        Progress { level, experience }
-    }
-
-    fn advance(&self, mut level: u32, mut experience: u64) -> Progress {
-        while level < u32::MAX {
-            let required = self.required_experience(level);
-            let affordable_levels =
-                (experience / u64::from(required)).min(u64::from(u32::MAX - level)) as u32;
-            if affordable_levels == 0 {
-                break;
-            }
-
-            // Rounding can give many consecutive levels the same cost.
-            let mut low = 1;
-            let mut high = affordable_levels;
-            while low < high {
-                let mid = low + (high - low).div_ceil(2);
-                if self.required_experience(level + (mid - 1)) == required {
-                    low = mid;
-                } else {
-                    high = mid - 1;
-                }
-            }
-            level += low;
-            experience -= u64::from(low) * u64::from(required);
-        }
-        Progress {
-            level,
-            experience: experience.min(u64::from(u32::MAX)) as u32,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
-
-    #[test]
-    fn direct_level_changes_cap_experience_without_advancing() {
-        let config = ExperienceConfig::default();
-
-        assert_eq!(
-            config.progress_at_level(1, 120),
-            Progress {
-                level: 1,
-                experience: 99
-            }
-        );
-        assert_eq!(
-            config.progress_at_level(1, 100),
-            Progress {
-                level: 1,
-                experience: 99
-            }
-        );
-        assert_eq!(
-            config.progress_at_level(3, 99),
-            Progress {
-                level: 3,
-                experience: 99
-            }
-        );
-        assert_eq!(
-            config.progress_at_level(u32::MAX, u32::MAX),
-            Progress {
-                level: u32::MAX,
-                experience: u32::MAX
-            }
-        );
-    }
 
     #[test]
     fn persists_level_and_experience_on_flush_and_shutdown() {
@@ -318,7 +201,8 @@ mod tests {
             timestamp.as_nanos()
         ));
         fs::create_dir(&directory).unwrap();
-        let manager = SkillManager::open(&directory).unwrap();
+        let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml")).unwrap());
+        let manager = SkillManager::open(&directory, boss_bars).unwrap();
         let key = (1, SkillType::Mining);
 
         let skill = manager.update_experience(key, |_| 215);

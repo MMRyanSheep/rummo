@@ -5,15 +5,20 @@ pub mod skills;
 mod storage;
 mod ui;
 
+use std::path::Path;
+use std::sync::Arc;
+
+use pumpkin_plugin_api::permissions::FS_WRITE_DATA;
+use pumpkin_plugin_api::{Context, Plugin, PluginMetadata, Result};
+use tracing::info;
+
 use events::{
     attact_event, block_drop_item_event, mining_event::MiningEvent, player_join_event,
     player_leave_event,
 };
-use pumpkin_plugin_api::permissions::FS_WRITE_DATA;
-use pumpkin_plugin_api::{Context, Plugin, PluginMetadata, Result};
-use skills::{mining, skill_manager::SkillManager};
-use tracing::info;
-use ui::bossbar_scheduler;
+use skills::mining::{self, MiningEffects};
+use skills::skill_manager::SkillManager;
+use ui::{bossbar_manager::BossBarManager, bossbar_scheduler};
 
 pub use skills::skill_manager;
 
@@ -41,7 +46,11 @@ impl Plugin for Rummo {
     fn on_load(&self, context: Context) -> Result<()> {
         let mining_event = MiningEvent::load(&context)?;
         commands::register(&context)?;
-        let (mining_effects, boss_bars) = SkillManager::initialize(&context)?;
+        let data_folder = context.get_data_folder();
+        let directory = Path::new(&data_folder);
+        let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
+        let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml"))?);
+        SkillManager::initialize(&context, boss_bars.clone())?;
         player_join_event::register(&context, mining_effects.clone(), boss_bars.clone())?;
         player_leave_event::register(&context, boss_bars.clone())?;
         mining::register(&context, mining_effects)?;
