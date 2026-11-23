@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::fs;
-use std::io::ErrorKind;
 use std::mem;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,6 +10,7 @@ use pumpkin_plugin_api::text::TextComponent;
 use pumpkin_plugin_api::{Player, Result};
 use serde::Deserialize;
 
+use crate::config;
 use crate::skills::skill_manager::{SkillInfo, SkillType, player_uuid};
 
 const DEFAULT_CONFIG: &str = include_str!("../../config/bossbar.toml");
@@ -35,17 +34,7 @@ pub(crate) struct BossBarManager {
 
 impl BossBarManager {
     pub(crate) fn load(path: &Path) -> Result<Self> {
-        let contents = match fs::read_to_string(path) {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == ErrorKind::NotFound => {
-                fs::write(path, DEFAULT_CONFIG)
-                    .map_err(|error| format!("Cannot create {}: {error}", path.display()))?;
-                DEFAULT_CONFIG.to_owned()
-            }
-            Err(error) => return Err(format!("Cannot read {}: {error}", path.display())),
-        };
-        let config: BossBarConfig = toml::from_str(&contents)
-            .map_err(|error| format!("Cannot parse {}: {error}", path.display()))?;
+        let config: BossBarConfig = config::load(path, DEFAULT_CONFIG)?;
         let color = match config.color.as_deref().unwrap_or("green") {
             "pink" => BossBarColor::Pink,
             "blue" => BossBarColor::Blue,

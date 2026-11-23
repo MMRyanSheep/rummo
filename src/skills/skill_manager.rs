@@ -1,5 +1,3 @@
-use std::fs;
-use std::io::ErrorKind;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -7,9 +5,11 @@ use pumpkin_plugin_api::{Context, Player, Result};
 use serde::Deserialize;
 
 use super::mining::MiningEffects;
+use crate::config;
 use crate::storage::{Progress, SkillKey, SkillStorage};
 use crate::ui::bossbar_manager::BossBarManager;
 
+const DEFAULT_EXPERIENCE: &str = include_str!("../../config/experience.toml");
 static MANAGER: Mutex<Option<SkillManager>> = Mutex::new(None);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -28,6 +28,12 @@ impl SkillType {
         match id {
             "mining" => Some(Self::Mining),
             _ => None,
+        }
+    }
+
+    pub(crate) const fn display_name(self) -> &'static str {
+        match self {
+            Self::Mining => "挖矿",
         }
     }
 }
@@ -72,10 +78,9 @@ pub struct SkillManager {
     storage: Arc<SkillStorage>,
 }
 
-#[allow(non_snake_case)]
 impl SkillManager {
     /// Adds experience, carrying any surplus across levels.
-    pub fn addExp(player: &Player, skill_type: SkillType, exp: u32) -> Result<SkillInfo> {
+    pub fn add_exp(player: &Player, skill_type: SkillType, exp: u32) -> Result<SkillInfo> {
         let key = skill_key(player, skill_type);
         with_manager(|manager| {
             manager.update_experience(key, |current| u64::from(current) + u64::from(exp))
@@ -83,12 +88,35 @@ impl SkillManager {
     }
 
     /// Replaces the current level's progress. Surplus experience advances levels.
-    pub fn setExp(player: &Player, skill_type: SkillType, exp: u32) -> Result<SkillInfo> {
+    pub fn set_exp(player: &Player, skill_type: SkillType, exp: u32) -> Result<SkillInfo> {
         let key = skill_key(player, skill_type);
         with_manager(|manager| manager.update_experience(key, |_| u64::from(exp)))
     }
 
-    pub fn getSkill(player: &Player, skill_type: SkillType) -> Result<SkillInfo> {
+    /// Sets the level and keeps as much current progress as the target level allows.
+    pub(crate) fn set_level(
+        player: &Player,
+        skill_type: SkillType,
+        level: u32,
+    ) -> Result<SkillInfo> {
+        if level == 0 {
+            return Err("Skill level must be at least 1".into());
+        }
+        let key = skill_key(player, skill_type);
+        with_manager(|manager| manager.update_level(key, |_| level))
+    }
+
+    /// Adds levels up to the maximum while preserving current progress.
+    pub(crate) fn add_level(
+        player: &Player,
+        skill_type: SkillType,
+        levels: u32,
+    ) -> Result<SkillInfo> {
+        let key = skill_key(player, skill_type);
+        with_manager(|manager| manager.update_level(key, |current| current.saturating_add(levels)))
+    }
+
+    pub fn get_skill(player: &Player, skill_type: SkillType) -> Result<SkillInfo> {
         let key = skill_key(player, skill_type);
         with_manager(|manager| manager.info(key, manager.storage.progress(key)))
     }
@@ -134,11 +162,26 @@ impl SkillManager {
     }
 
     fn update_experience(&self, key: SkillKey, experience: impl FnOnce(u32) -> u64) -> SkillInfo {
-        let previous = self.storage.progress(key);
-        let progress = self.storage.update(key, |current| {
+        self.update_progress(key, |current| {
             self.config
                 .advance(current.level, experience(current.experience))
-        });
+        })
+    }
+
+    fn update_level(&self, key: SkillKey, level: impl FnOnce(u32) -> u32) -> SkillInfo {
+        self.update_progress(key, |current| {
+            self.config
+                .progress_at_level(level(current.level), current.experience)
+        })
+    }
+
+    fn update_progress(
+        &self,
+        key: SkillKey,
+        update: impl FnOnce(Progress) -> Progress,
+    ) -> SkillInfo {
+        let previous = self.storage.progress(key);
+        let progress = self.storage.update(key, update);
         let info = self.info(key, progress);
         if progress != previous {
             self.boss_bars.experience_updated(key.1, info);
@@ -194,21 +237,7 @@ impl Default for ExperienceConfig {
 
 impl ExperienceConfig {
     fn load(path: &Path) -> Result<Self> {
-        let config: Self = match fs::read_to_string(path) {
-            Ok(contents) => toml::from_str(&contents)
-                .map_err(|error| format!("Cannot parse {}: {error}", path.display()))?,
-            Err(error) if error.kind() == ErrorKind::NotFound => {
-                let defaults = Self::default();
-                let contents = format!(
-                    "base_experience = {}\nlevel_multiplier = {}\n",
-                    defaults.base_experience, defaults.level_multiplier
-                );
-                fs::write(path, contents)
-                    .map_err(|error| format!("Cannot create {}: {error}", path.display()))?;
-                defaults
-            }
-            Err(error) => return Err(format!("Cannot read {}: {error}", path.display())),
-        };
+        let config: Self = config::load(path, DEFAULT_EXPERIENCE)?;
         if config.base_experience == 0
             || !config.level_multiplier.is_finite()
             || config.level_multiplier < 1.0
@@ -224,6 +253,15 @@ impl ExperienceConfig {
     fn required_experience(&self, level: u32) -> u32 {
         (f64::from(self.base_experience) * self.level_multiplier.powf(f64::from(level - 1))).round()
             as u32
+    }
+
+    fn progress_at_level(&self, level: u32, experience: u32) -> Progress {
+        let experience = if level == u32::MAX {
+            experience
+        } else {
+            experience.min(self.required_experience(level) - 1)
+        };
+        Progress { level, experience }
     }
 
     fn advance(&self, mut level: u32, mut experience: u64) -> Progress {
@@ -258,8 +296,44 @@ impl ExperienceConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    #[test]
+    fn direct_level_changes_cap_experience_without_advancing() {
+        let config = ExperienceConfig::default();
+
+        assert_eq!(
+            config.progress_at_level(1, 120),
+            Progress {
+                level: 1,
+                experience: 99
+            }
+        );
+        assert_eq!(
+            config.progress_at_level(1, 100),
+            Progress {
+                level: 1,
+                experience: 99
+            }
+        );
+        assert_eq!(
+            config.progress_at_level(3, 99),
+            Progress {
+                level: 3,
+                experience: 99
+            }
+        );
+        assert_eq!(
+            config.progress_at_level(u32::MAX, u32::MAX),
+            Progress {
+                level: u32::MAX,
+                experience: u32::MAX
+            }
+        );
+    }
 
     #[test]
     fn mining_drop_probabilities_give_triple_priority() {
@@ -312,15 +386,17 @@ mod tests {
             }
         );
 
-        manager.update_experience(key, |_| 121);
+        manager.update_experience(key, |_| 121 + 110);
+        let skill = manager.update_level(key, |_| 1);
+        assert_eq!((skill.level, skill.experience), (1, 99));
         *MANAGER.lock().unwrap() = Some(manager);
         SkillManager::shutdown().unwrap();
         let saved = SkillStorage::open(&directory).unwrap().progress(key);
         assert_eq!(
             saved,
             Progress {
-                level: 4,
-                experience: 0
+                level: 1,
+                experience: 99
             }
         );
 

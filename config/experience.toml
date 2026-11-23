@@ -1,0 +1,4 @@
+# Experience required to advance from level 1.
+base_experience = 100
+# Multiplier applied for each level above level 1.
+level_multiplier = 1.1

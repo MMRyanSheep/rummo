@@ -25,9 +25,7 @@ pub(super) fn render_dirty(manager: &BossBarManager, server: &Server) {
 }
 
 fn presentation(skill: SkillType, info: SkillInfo) -> (String, f32) {
-    let name = match skill {
-        SkillType::Mining => "挖矿",
-    };
+    let name = skill.display_name();
     let level = info.level;
     match info.required_experience {
         Some(required) => (
