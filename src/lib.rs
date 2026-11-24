@@ -13,6 +13,7 @@ use pumpkin_plugin_api::permissions::FS_WRITE_DATA;
 use pumpkin_plugin_api::{Context, Plugin, PluginMetadata, Result};
 use tracing::info;
 
+use abilities::ability_registry::AbilityRegistry;
 use events::{
     attact_event, block_drop_item_event, mining_event::MiningEvent, player_join_event,
     player_leave_event, right_click_air_event,
@@ -51,6 +52,7 @@ impl Plugin for Rummo {
         let directory = Path::new(&data_folder);
         let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
         let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml"))?);
+        let ability_registry = AbilityRegistry::load(&directory.join("abilities.toml"))?;
         SkillManager::initialize(&context, boss_bars.clone())?;
         mining::register(mining_effects.clone())?;
         player_join_event::register(&context, mining_effects, boss_bars.clone())?;
@@ -58,7 +60,7 @@ impl Plugin for Rummo {
         mining_event.register(&context)?;
         attact_event::register(&context)?;
         block_drop_item_event::register(&context)?;
-        right_click_air_event::register(&context)?;
+        right_click_air_event::register(&context, ability_registry)?;
         bossbar_scheduler::register(&context, &boss_bars);
         info!("rummo loaded");
         Ok(())

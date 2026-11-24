@@ -1,0 +1,11 @@
+[abilities.super_breaker]
+# Parent skill ID.
+parent_skill = "mining"
+# Reserved unlock level.
+unlock_level = 10
+# Base cooldown in seconds.
+base_cooldown = 120.0
+# Cooldown reduction in seconds per parent skill level.
+cooldown_per_level = 2.0
+# Minimum cooldown in seconds.
+min_cooldown = 30.0

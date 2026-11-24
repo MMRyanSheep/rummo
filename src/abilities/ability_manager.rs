@@ -1,14 +1,20 @@
 use pumpkin_plugin_api::Player;
+use serde::Deserialize;
 
+use super::ability_registry::AbilityRegistry;
 use super::cooldown_manager::COOLDOWNS;
 use crate::skills::skill_manager::player_uuid;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum AbilityId {
     SuperBreaker,
 }
 
-pub(crate) fn activate(ability_id: AbilityId, player: &Player, item_id: &str) {
+pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player: &Player) {
+    if registry.get(ability_id).is_none() {
+        return;
+    }
     let player_id = player_uuid(player);
     let is_ready = COOLDOWNS
         .lock()
@@ -19,10 +25,10 @@ pub(crate) fn activate(ability_id: AbilityId, player: &Player, item_id: &str) {
     }
 
     match ability_id {
-        AbilityId::SuperBreaker => activate_super_breaker(player, item_id),
+        AbilityId::SuperBreaker => activate_super_breaker(player),
     }
 }
 
-fn activate_super_breaker(player: &Player, item_id: &str) {
-    tracing::trace!(player = %player.get_name(), item_id, "SuperBreaker requested");
+fn activate_super_breaker(player: &Player) {
+    return;
 }
