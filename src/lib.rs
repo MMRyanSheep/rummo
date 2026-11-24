@@ -1,3 +1,4 @@
+mod abilities;
 mod commands;
 mod config;
 mod events;
@@ -14,7 +15,7 @@ use tracing::info;
 
 use events::{
     attact_event, block_drop_item_event, mining_event::MiningEvent, player_join_event,
-    player_leave_event,
+    player_leave_event, right_click_air_event,
 };
 use skills::mining::{self, MiningEffects};
 use skills::skill_manager::SkillManager;
@@ -57,6 +58,7 @@ impl Plugin for Rummo {
         mining_event.register(&context)?;
         attact_event::register(&context)?;
         block_drop_item_event::register(&context)?;
+        right_click_air_event::register(&context)?;
         bossbar_scheduler::register(&context, &boss_bars);
         info!("rummo loaded");
         Ok(())
