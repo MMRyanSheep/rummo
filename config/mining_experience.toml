@@ -1,34 +1,133 @@
-# Mining experience awarded per block. Unlisted blocks and zero values give no experience.
+﻿# Mining experience awarded per block. Unlisted blocks and zero values give no experience.
 # Vanilla block IDs may omit the minecraft: namespace.
-stone = 1
-deepslate = 1
-granite = 1
-diorite = 1
-andesite = 1
-tuff = 1
-netherrack = 1
-end_stone = 1
 
-coal_ore = 3
-deepslate_coal_ore = 3
-copper_ore = 3
-deepslate_copper_ore = 3
+# Ores
+ancient_debris = 7777
+deepslate_diamond_ore = 3600
+diamond_ore = 2400
+deepslate_copper_ore = 1900
+deepslate_gold_ore = 1900
+deepslate_emerald_ore = 1700
+copper_ore = 1400
+deepslate_lapis_ore = 1400
+deepslate_iron_ore = 1300
+gold_ore = 1300
+nether_gold_ore = 1300
+emerald_ore = 1000
+iron_ore = 900
+deepslate_redstone_ore = 900
+lapis_ore = 800
+deepslate_coal_ore = 700
+redstone_ore = 600
+coal_ore = 400
+nether_quartz_ore = 300
+gilded_blackstone = 200
 
-iron_ore = 5
-deepslate_iron_ore = 5
-nether_quartz_ore = 5
+# Stone and terrain
+reinforced_deepslate = 500
+smooth_basalt = 300
+obsidian = 150
+blackstone = 55
+basalt = 40
+mud_bricks = 40
+dripstone_block = 35
+deepslate = 30
+magma_block = 30
+mossy_cobblestone = 30
+packed_mud = 30
+sandstone = 30
+terracotta = 30
+andesite = 15
+blue_ice = 15
+cobbled_deepslate = 15
+diorite = 15
+end_stone = 15
+glowstone = 15
+granite = 15
+netherrack = 15
+packed_ice = 15
+stone = 15
+tuff = 10
+crimson_nylium = 5
+warped_nylium = 5
 
-gold_ore = 8
-deepslate_gold_ore = 8
-nether_gold_ore = 8
-redstone_ore = 8
-deepslate_redstone_ore = 8
-lapis_ore = 8
-deepslate_lapis_ore = 8
+# Decorative and polished blocks
+crying_obsidian = 3000
+purpur_pillar = 250
+purpur_stairs = 250
+purpur_block = 200
+purpur_slab = 150
+red_sandstone = 100
+chain = 100
+prismarine = 70
+prismarine_bricks = 70
+dark_prismarine = 70
+sea_lantern = 70
+nether_bricks = 50
+cracked_nether_bricks = 50
+chiseled_nether_bricks = 50
+nether_brick_stairs = 50
+nether_brick_slab = 50
+nether_brick_wall = 50
+nether_brick_fence = 50
+red_nether_bricks = 50
+red_nether_brick_stairs = 50
+red_nether_brick_slab = 50
+red_nether_brick_wall = 50
+stone_bricks = 50
+mossy_stone_bricks = 50
+cracked_stone_bricks = 50
+chiseled_stone_bricks = 50
+stone_brick_stairs = 50
+stone_brick_slab = 50
+stone_brick_wall = 50
+mossy_stone_brick_stairs = 50
+mossy_stone_brick_slab = 50
+mossy_stone_brick_wall = 50
+end_stone_bricks = 50
+white_terracotta = 50
+orange_terracotta = 50
+magenta_terracotta = 50
+light_blue_terracotta = 50
+yellow_terracotta = 50
+lime_terracotta = 50
+pink_terracotta = 50
+gray_terracotta = 50
+light_gray_terracotta = 50
+cyan_terracotta = 50
+purple_terracotta = 50
+blue_terracotta = 50
+brown_terracotta = 50
+green_terracotta = 50
+red_terracotta = 50
+black_terracotta = 50
 
-diamond_ore = 15
-deepslate_diamond_ore = 15
-emerald_ore = 15
-deepslate_emerald_ore = 15
+# Amethyst
+amethyst_block = 500
+budding_amethyst = 400
+amethyst_cluster = 60
+large_amethyst_bud = 30
+medium_amethyst_bud = 20
+small_amethyst_bud = 10
 
-ancient_debris = 25
+# Sculk
+sculk_shrieker = 12
+sculk_catalyst = 10
+sculk_sensor = 6
+sculk = 4
+sculk_vein = 3
+
+# Coral blocks
+horn_coral_block = 125
+fire_coral_block = 90
+brain_coral_block = 80
+tube_coral_block = 75
+bubble_coral_block = 70
+
+# Other
+bone_block = 500
+calcite = 400
+
+# Cinnabar and sulfur are non-vanilla blocks. Add their namespaced IDs here
+# for servers that provide them: cinnabar and sulfur variants 40, potent sulfur
+# 60, and sulfur spike 30.
