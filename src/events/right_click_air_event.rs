@@ -4,8 +4,9 @@ use pumpkin_plugin_api::events::{
 };
 use pumpkin_plugin_api::{Context, IntoItemKey, Item, Player, Result, Server};
 
-use crate::abilities::ability_manager::{self, AbilityId};
+use crate::abilities::ability_manager::AbilityId;
 use crate::abilities::ability_registry::AbilityRegistry;
+use crate::abilities::active_ability_manager;
 use crate::skills::axes::is_axe;
 
 pub(crate) fn register(context: &Context, ability_registry: AbilityRegistry) -> Result<()> {
@@ -36,7 +37,7 @@ impl EventHandler<PlayerInteractEvent> for RightClickAir {
         if let Some(item) = held_item
             && let Some(ability_id) = item.ability_id()
         {
-            ability_manager::activate(&self.ability_registry, ability_id, &data.player);
+            active_ability_manager::activate(&self.ability_registry, ability_id, &data.player);
         }
         data
     }

@@ -20,6 +20,8 @@ pub(crate) struct AbilityDefinition {
     pub(crate) cooldown_per_level: Duration,
     #[serde(deserialize_with = "deserialize_duration")]
     pub(crate) min_cooldown: Duration,
+    #[serde(deserialize_with = "deserialize_duration")]
+    pub(crate) duration: Duration,
 }
 
 fn deserialize_parent_skill<'de, D: Deserializer<'de>>(
