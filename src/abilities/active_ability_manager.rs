@@ -5,6 +5,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use pumpkin_plugin_api::Player;
+use pumpkin_plugin_api::text::TextComponent;
 
 use super::ability_lifecycle_service::AbilityLifecycleService;
 use super::ability_manager::AbilityId;
@@ -98,6 +99,18 @@ pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player
         .expect("cooldown manager lock")
         .is_ready(player_id, ability_id);
     if !is_ready {
+        let remaining = COOLDOWNS
+            .lock()
+            .expect("cooldown manager lock")
+            .remaining(player_id, ability_id);
+        let seconds = remaining
+            .as_nanos()
+            .div_ceil(Duration::from_secs(1).as_nanos())
+            .max(1);
+        player.show_subtitle(TextComponent::text(&format!(
+            "还剩{seconds}秒才可以激活超级挖掘机"
+        )));
+        player.show_title(TextComponent::text(""));
         return;
     }
 
