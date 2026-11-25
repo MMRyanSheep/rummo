@@ -1,7 +1,7 @@
 use pumpkin_plugin_api::{
-    Attribute, AttributeModifier, ModifierOperation, Player, events::player_respawn,
+    Attribute, AttributeModifier, ModifierOperation, Player, text::TextComponent,
 };
-const SPEED_MODIFIER_ID: &str = "rummo:mining_speed";
+const SPEED_MODIFIER_ID: &str = "rummo:super_breaker";
 
 pub(crate) fn activate_super_breaker(player: &Player) {
     let Some(living) = player.as_entity().as_living() else {
@@ -15,7 +15,7 @@ pub(crate) fn activate_super_breaker(player: &Player) {
             operation: ModifierOperation::MultiplyTotal,
         },
     );
-    return;
+    player.show_subtitle(TextComponent::text("已激活超级挖掘机"));
 }
 
 pub(crate) fn deactivate_super_breaker(player: &Player) {

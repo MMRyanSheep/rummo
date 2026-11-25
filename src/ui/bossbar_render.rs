@@ -1,9 +1,8 @@
 use pumpkin_plugin_api::Server;
 use pumpkin_plugin_api::text::TextComponent;
-use pumpkin_plugin_api::uuid::Uuid;
 
 use super::bossbar_manager::BossBarManager;
-use crate::skills::skill_manager::{SkillInfo, SkillType};
+use crate::skills::skill_manager::{SkillInfo, SkillType, to_pumpkin_uuid};
 
 pub(super) fn render_dirty(manager: &BossBarManager, server: &Server) {
     for (bar, skill, info) in manager.dirty() {
@@ -11,11 +10,7 @@ pub(super) fn render_dirty(manager: &BossBarManager, server: &Server) {
         bar.bar.set_title(TextComponent::text(&title));
         bar.bar.set_health(progress);
         if !bar.is_visible() {
-            let uuid = Uuid {
-                high: (info.player_uuid >> 64) as u64,
-                low: info.player_uuid as u64,
-            };
-            let Some(player) = server.get_player_by_uuid(uuid) else {
+            let Some(player) = server.get_player_by_uuid(to_pumpkin_uuid(info.player_uuid)) else {
                 continue;
             };
             bar.show(player);

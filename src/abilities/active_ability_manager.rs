@@ -1,10 +1,12 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
+use std::collections::binary_heap::PeekMut;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use pumpkin_plugin_api::Player;
 
+use super::ability_lifecycle_service::AbilityLifecycleService;
 use super::ability_manager::AbilityId;
 use super::ability_registry::AbilityRegistry;
 use super::cooldown_manager::COOLDOWNS;
@@ -13,7 +15,7 @@ use crate::skills::skill_manager::player_uuid;
 
 type Uuid = u128;
 
-static ACTIVE_ABILITY_MANAGER: LazyLock<Mutex<ActiveAbilityManager>> =
+pub(super) static ACTIVE_ABILITY_MANAGER: LazyLock<Mutex<ActiveAbilityManager>> =
     LazyLock::new(|| Mutex::new(ActiveAbilityManager::default()));
 
 #[derive(Default)]
@@ -21,14 +23,31 @@ pub(crate) struct ActiveAbilityManager {
     expiration_queue: BinaryHeap<Reverse<ExpirationEntry>>,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "Expiration entries are not processed yet")
-)]
 pub(crate) struct ExpirationEntry {
     pub expires_at: Instant,
     pub uuid: Uuid,
     pub ability_id: AbilityId,
+}
+
+impl ExpirationEntry {
+    fn for_activation(
+        uuid: Uuid,
+        ability_id: AbilityId,
+        duration: Duration,
+    ) -> Result<Option<Self>, &'static str> {
+        if duration.is_zero() {
+            return Ok(None);
+        }
+
+        let expires_at = Instant::now()
+            .checked_add(duration)
+            .ok_or("Ability duration is too large")?;
+        Ok(Some(Self {
+            expires_at,
+            uuid,
+            ability_id,
+        }))
+    }
 }
 
 impl Ord for ExpirationEntry {
@@ -52,25 +71,20 @@ impl PartialEq for ExpirationEntry {
 impl Eq for ExpirationEntry {}
 
 impl ActiveAbilityManager {
-    fn record_activation(
-        &mut self,
-        uuid: Uuid,
-        ability_id: AbilityId,
-        duration: Duration,
-    ) -> Result<(), &'static str> {
-        if duration.is_zero() {
-            return Ok(());
-        }
+    pub(super) fn next_expiration(&self) -> Option<Instant> {
+        self.expiration_queue.peek().map(|entry| entry.0.expires_at)
+    }
 
-        let expires_at = Instant::now()
-            .checked_add(duration)
-            .ok_or("Ability duration is too large")?;
-        self.expiration_queue.push(Reverse(ExpirationEntry {
-            expires_at,
-            uuid,
-            ability_id,
-        }));
-        Ok(())
+    pub(super) fn take_expired(&mut self, now: Instant) -> Vec<ExpirationEntry> {
+        let mut expired = Vec::new();
+        while let Some(entry) = self
+            .expiration_queue
+            .peek_mut()
+            .filter(|entry| entry.0.expires_at <= now)
+        {
+            expired.push(PeekMut::pop(entry).0);
+        }
+        expired
     }
 }
 
@@ -87,17 +101,26 @@ pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player
         return;
     }
 
-    let result = ACTIVE_ABILITY_MANAGER
-        .lock()
-        .expect("active ability manager lock")
-        .record_activation(player_id, ability_id, definition.duration);
-    if let Err(error) = result {
-        tracing::error!(?ability_id, %error, "Failed to activate ability");
-        return;
-    }
+    let expiration =
+        match ExpirationEntry::for_activation(player_id, ability_id, definition.duration) {
+            Ok(expiration) => expiration,
+            Err(error) => {
+                tracing::error!(?ability_id, %error, "Failed to activate ability");
+                return;
+            }
+        };
 
     match ability_id {
         AbilityId::SuperBreaker => activate_super_breaker(player),
+    }
+
+    if let Some(expiration) = expiration {
+        ACTIVE_ABILITY_MANAGER
+            .lock()
+            .expect("active ability manager lock")
+            .expiration_queue
+            .push(Reverse(expiration));
+        AbilityLifecycleService::schedule_next();
     }
 }
 
@@ -106,32 +129,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tracks_only_activated_duration_abilities() {
-        let mut manager = ActiveAbilityManager::default();
+    fn builds_expiration_only_for_duration_abilities() {
         let ability_id = AbilityId::SuperBreaker;
         let duration = Duration::from_secs(4);
         let started = Instant::now();
 
-        manager.record_activation(1, ability_id, duration).unwrap();
-        manager
-            .record_activation(2, ability_id, Duration::ZERO)
+        let expiration = ExpirationEntry::for_activation(1, ability_id, duration)
+            .unwrap()
             .unwrap();
+        assert!(
+            ExpirationEntry::for_activation(2, ability_id, Duration::ZERO)
+                .unwrap()
+                .is_none()
+        );
 
-        let Reverse(expiration) = manager.expiration_queue.pop().unwrap();
         assert!(expiration.expires_at >= started + duration);
         assert!(expiration.expires_at <= Instant::now() + duration);
         assert_eq!(expiration.uuid, 1);
         assert_eq!(expiration.ability_id, ability_id);
-        assert!(manager.expiration_queue.is_empty());
     }
 
     #[test]
-    fn queues_earliest_expiration_first() {
+    fn drains_due_expirations_in_order() {
         let now = Instant::now();
         let ability_id = AbilityId::SuperBreaker;
-        let queue = BinaryHeap::from([
+        let later = now + Duration::from_secs(1);
+        let expiration_queue = BinaryHeap::from([
             Reverse(ExpirationEntry {
-                expires_at: now + Duration::from_secs(1),
+                expires_at: later,
                 uuid: 1,
                 ability_id,
             }),
@@ -140,8 +165,21 @@ mod tests {
                 uuid: 2,
                 ability_id,
             }),
+            Reverse(ExpirationEntry {
+                expires_at: now - Duration::from_secs(1),
+                uuid: 3,
+                ability_id,
+            }),
         ]);
 
-        assert_eq!(queue.peek().unwrap().0.uuid, 2);
+        let mut manager = ActiveAbilityManager { expiration_queue };
+        let expired = manager.take_expired(now);
+        assert_eq!(
+            expired.iter().map(|entry| entry.uuid).collect::<Vec<_>>(),
+            [3, 2]
+        );
+        assert_eq!(manager.next_expiration(), Some(later));
+        assert_eq!(manager.take_expired(later)[0].uuid, 1);
+        assert_eq!(manager.next_expiration(), None);
     }
 }

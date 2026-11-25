@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use pumpkin_plugin_api::uuid::Uuid;
 use pumpkin_plugin_api::{Context, Player, Result};
 
 use super::experience::ExperienceConfig;
@@ -213,6 +214,13 @@ fn skill_key(player: &Player, skill_type: SkillType) -> SkillKey {
 pub(crate) fn player_uuid(player: &Player) -> u128 {
     let uuid = player.get_id();
     (u128::from(uuid.high) << 64) | u128::from(uuid.low)
+}
+
+pub(crate) fn to_pumpkin_uuid(uuid: u128) -> Uuid {
+    Uuid {
+        high: (uuid >> 64) as u64,
+        low: uuid as u64,
+    }
 }
 
 fn with_manager<T>(use_manager: impl FnOnce(&SkillManager) -> T) -> Result<T> {
