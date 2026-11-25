@@ -1,2 +1,2 @@
-# Added to the 1.0x mining speed multiplier per Rummo mining skill level.
+# Flat mining efficiency bonus per Rummo mining skill level for suitable tools.
 speed_bonus_per_level = 0.1

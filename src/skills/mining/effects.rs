@@ -53,14 +53,14 @@ impl MiningEffects {
         // The built-in attribute has a maximum value of 1024.
         let bonus = (f64::from(level) * self.config.speed_bonus_per_level).min(1023.0);
         if bonus == 0.0 {
-            living.remove_attribute_modifier(Attribute::BlockBreakSpeed, SPEED_MODIFIER_ID);
+            living.remove_attribute_modifier(Attribute::MiningEfficiency, SPEED_MODIFIER_ID);
         } else {
             living.add_attribute_modifier(
-                Attribute::BlockBreakSpeed,
+                Attribute::MiningEfficiency,
                 &AttributeModifier {
                     id: SPEED_MODIFIER_ID.into(),
                     amount: bonus,
-                    operation: ModifierOperation::MultiplyTotal,
+                    operation: ModifierOperation::Add,
                 },
             );
         }

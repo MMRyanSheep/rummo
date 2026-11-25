@@ -8,11 +8,11 @@ pub(crate) fn activate_super_breaker(player: &Player) {
         return;
     };
     living.add_attribute_modifier(
-        Attribute::BlockBreakSpeed,
+        Attribute::MiningEfficiency,
         &AttributeModifier {
             id: SPEED_MODIFIER_ID.into(),
-            amount: 4.0,
-            operation: ModifierOperation::MultiplyTotal,
+            amount: 444.0,
+            operation: ModifierOperation::Add,
         },
     );
     player.show_subtitle(TextComponent::text("已激活超级挖掘机"));
@@ -25,5 +25,5 @@ pub(crate) fn deactivate_super_breaker(player: &Player) {
     };
     player.show_subtitle(TextComponent::text("超级挖掘机技能已结束"));
     player.show_title(TextComponent::text(""));
-    living.remove_attribute_modifier(Attribute::BlockBreakSpeed, SPEED_MODIFIER_ID);
+    living.remove_attribute_modifier(Attribute::MiningEfficiency, SPEED_MODIFIER_ID);
 }
