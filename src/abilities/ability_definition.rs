@@ -6,13 +6,13 @@ use crate::skills::skill_manager::SkillType;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "Ability effects do not use these settings yet")
-)]
 pub(crate) struct AbilityDefinition {
     #[serde(deserialize_with = "deserialize_parent_skill")]
     pub(crate) parent_skill: SkillType,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Ability unlocking is not implemented yet")
+    )]
     pub(crate) unlock_level: u32,
     #[serde(deserialize_with = "deserialize_duration")]
     pub(crate) base_cooldown: Duration,

@@ -2,14 +2,29 @@ use pumpkin_plugin_api::{
     Attribute, AttributeModifier, ModifierOperation, Player, text::TextComponent,
 };
 
+use crate::abilities::ability_definition::AbilityDefinition;
+use crate::abilities::ability_manager::AbilityId;
+use crate::abilities::active_ability_manager::show_cooldown;
+use crate::abilities::cooldown_manager::CooldownManager;
 use crate::i18n;
 
 const SPEED_MODIFIER_ID: &str = "rummo:super_breaker";
 
-pub(crate) fn activate_super_breaker(player: &Player) {
+pub(crate) fn activate_super_breaker(
+    player: &Player,
+    player_id: u128,
+    definition: &AbilityDefinition,
+) -> Result<bool, &'static str> {
     let Some(living) = player.as_entity().as_living() else {
-        return;
+        return Ok(false);
     };
+    let ability_id = AbilityId::SuperBreaker;
+    if let Some(remaining) =
+        CooldownManager::start_cooldown(player, player_id, ability_id, definition)?
+    {
+        show_cooldown(player, ability_id, remaining);
+        return Ok(false);
+    }
     living.add_attribute_modifier(
         Attribute::MiningEfficiency,
         &AttributeModifier {
@@ -23,6 +38,7 @@ pub(crate) fn activate_super_breaker(player: &Player) {
         messages.text("ability.super_breaker.activated"),
     ));
     player.show_title(TextComponent::text(""));
+    Ok(true)
 }
 
 pub(crate) fn deactivate_super_breaker(player: &Player) {

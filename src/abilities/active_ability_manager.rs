@@ -10,7 +10,6 @@ use pumpkin_plugin_api::text::TextComponent;
 use super::ability_lifecycle_service::AbilityLifecycleService;
 use super::ability_manager::AbilityId;
 use super::ability_registry::AbilityRegistry;
-use super::cooldown_manager::COOLDOWNS;
 use super::mining::super_breaker::activate_super_breaker;
 use crate::i18n;
 use crate::skills::skill_manager::player_uuid;
@@ -95,31 +94,6 @@ pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player
         return;
     };
     let player_id = player_uuid(player);
-    let is_ready = COOLDOWNS
-        .lock()
-        .expect("cooldown manager lock")
-        .is_ready(player_id, ability_id);
-    if !is_ready {
-        let remaining = COOLDOWNS
-            .lock()
-            .expect("cooldown manager lock")
-            .remaining(player_id, ability_id);
-        let seconds = remaining
-            .as_nanos()
-            .div_ceil(Duration::from_secs(1).as_nanos())
-            .max(1);
-        let messages = i18n::for_player(player);
-        player.show_subtitle(TextComponent::text(&messages.format(
-            "ability.cooldown",
-            &[
-                ("seconds", &seconds),
-                ("ability", &messages.text(ability_id.name_key())),
-            ],
-        )));
-        player.show_title(TextComponent::text(""));
-        return;
-    }
-
     let expiration =
         match ExpirationEntry::for_activation(player_id, ability_id, definition.duration) {
             Ok(expiration) => expiration,
@@ -129,8 +103,16 @@ pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player
             }
         };
 
-    match ability_id {
-        AbilityId::SuperBreaker => activate_super_breaker(player),
+    let activation = match ability_id {
+        AbilityId::SuperBreaker => activate_super_breaker(player, player_id, definition),
+    };
+    match activation {
+        Ok(true) => {}
+        Ok(false) => return,
+        Err(error) => {
+            tracing::error!(?ability_id, %error, "Failed to activate ability");
+            return;
+        }
     }
 
     if let Some(expiration) = expiration {
@@ -141,6 +123,21 @@ pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player
             .push(Reverse(expiration));
         AbilityLifecycleService::schedule_next();
     }
+}
+
+pub(super) fn show_cooldown(player: &Player, ability_id: AbilityId, remaining: Duration) {
+    let seconds = remaining
+        .as_nanos()
+        .div_ceil(Duration::from_secs(1).as_nanos());
+    let messages = i18n::for_player(player);
+    player.show_subtitle(TextComponent::text(&messages.format(
+        "ability.cooldown",
+        &[
+            ("seconds", &seconds),
+            ("ability", &messages.text(ability_id.name_key())),
+        ],
+    )));
+    player.show_title(TextComponent::text(""));
 }
 
 #[cfg(test)]
