@@ -2,36 +2,44 @@ use pumpkin_plugin_api::Server;
 use pumpkin_plugin_api::text::TextComponent;
 
 use super::bossbar_manager::BossBarManager;
+use crate::i18n::{self, Messages};
 use crate::skills::skill_manager::{SkillInfo, SkillType, to_pumpkin_uuid};
 
 pub(super) fn render_dirty(manager: &BossBarManager, server: &Server) {
     for (bar, skill, info) in manager.dirty() {
-        let (title, progress) = presentation(skill, info);
+        let Some(player) = server.get_player_by_uuid(to_pumpkin_uuid(info.player_uuid)) else {
+            continue;
+        };
+        let (title, progress) = presentation(&i18n::for_player(&player), skill, info);
         bar.bar.set_title(TextComponent::text(&title));
         bar.bar.set_health(progress);
         if !bar.is_visible() {
-            let Some(player) = server.get_player_by_uuid(to_pumpkin_uuid(info.player_uuid)) else {
-                continue;
-            };
             bar.show(player);
         }
         manager.clear_rendered(&bar, skill, info);
     }
 }
 
-fn presentation(skill: SkillType, info: SkillInfo) -> (String, f32) {
-    let name = skill.display_name();
+fn presentation(messages: &Messages, skill: SkillType, info: SkillInfo) -> (String, f32) {
+    let name = messages.text(skill.name_key());
     let level = info.level;
     match info.required_experience {
         Some(required) => (
-            format!(
-                "{name} Lv.{level} — {} / {} XP",
-                format_xp(info.experience),
-                format_xp(required),
+            messages.format(
+                "bossbar.progress",
+                &[
+                    ("skill", &name),
+                    ("level", &level),
+                    ("experience", &format_xp(info.experience)),
+                    ("required", &format_xp(required)),
+                ],
             ),
             (f64::from(info.experience) / f64::from(required)).clamp(0.0, 1.0) as f32,
         ),
-        None => (format!("{name} Lv.{level} — 已满级"), 1.0),
+        None => (
+            messages.format("bossbar.max", &[("skill", &name), ("level", &level)]),
+            1.0,
+        ),
     }
 }
 
@@ -63,8 +71,12 @@ mod tests {
         };
 
         assert_eq!(
-            presentation(skill, info),
+            presentation(&Messages::bundled("zh_cn"), skill, info),
             ("斧技 Lv.2 — 55 / 110 XP".into(), 0.5),
+        );
+        assert_eq!(
+            presentation(&Messages::bundled("en_us"), skill, info),
+            ("Axes Lv.2 — 55 / 110 XP".into(), 0.5),
         );
     }
 }

@@ -1,0 +1,3 @@
+# Language for players whose client language is unknown, for the console, and for command descriptions.
+# Must name a file in the lang folder without its extension, such as "en_us" or "zh_cn".
+default = "zh_cn"

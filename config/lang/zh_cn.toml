@@ -1,0 +1,44 @@
+# Simplified Chinese messages. Text in {braces} is replaced at runtime; keep the same placeholder names.
+# Keys missing from this file use the bundled Simplified Chinese text.
+
+[skill]
+mining = "挖矿"
+axes = "斧技"
+# Shown by the skill commands.
+details = "{skill} Lv.{level} — 本级经验 {experience} / {required} XP"
+details_max = "{skill} Lv.{level} — 已满级，当前经验 {experience} XP"
+
+[bossbar]
+progress = "{skill} Lv.{level} — {experience} / {required} XP"
+max = "{skill} Lv.{level} — 已满级"
+
+[ability]
+cooldown = "还剩{seconds}秒才可以激活{ability}"
+
+[ability.super_breaker]
+name = "超级挖掘机"
+activated = "已激活超级挖掘机"
+expired = "超级挖掘机技能已结束"
+
+[command]
+info = "作者 {authors}  |  版本 {version}"
+help = "列出可用指令"
+updated = "已更新 {player} 的技能：{details}"
+
+# Command and permission descriptions use the server default language.
+[command.description]
+rummo = "查看 Rummo 信息和指令帮助"
+skill = "查看自己的{skill}技能详情"
+setexp = "设置玩家的技能经验"
+setlevel = "设置玩家的技能等级"
+addexp = "增加玩家的技能经验"
+addlevel = "增加玩家的技能等级"
+
+[command.error]
+permission = "此指令需要至少 2 级 OP 和对应的权限。"
+player = "请选择一名在线玩家。"
+player_only = "此指令只能由玩家执行。"
+skill_id = "请输入技能 ID。"
+unknown_skill = "未知技能「{skill}」。"
+range = "请输入 {min} 到 {max} 之间的整数。"
+skill_failed = "技能操作失败，请查看服务器日志。"

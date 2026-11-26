@@ -33,10 +33,10 @@ impl SkillType {
         }
     }
 
-    pub(crate) const fn display_name(self) -> &'static str {
+    pub(crate) const fn name_key(self) -> &'static str {
         match self {
-            Self::Mining => "挖矿",
-            Self::Axes => "斧技",
+            Self::Mining => "skill.mining",
+            Self::Axes => "skill.axes",
         }
     }
 }

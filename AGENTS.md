@@ -36,6 +36,7 @@ Before you say a change is done, `cargo fmt --all`, the Clippy command, `cargo t
 - `src/abilities/` contains ability definitions, the registry, runtime cooldown and expiration state, and active ability effects such as `mining/super_breaker.rs`.
 - `src/storage/cache.rs` keeps progress and pending writes in memory. `src/storage/sqlite.rs` implements **redb** persistence in `skills.redb`. Autosave runs every `20 * 30` ticks, with a final save on unload.
 - `src/ui/` manages per-player skill progress bars. `bossbar_scheduler.rs` updates them every 4 ticks and hides them after 5 seconds without an experience update. `bossbar_render.rs` formats the text.
+- `src/i18n.rs` loads `language.toml` (server default language) and every `lang/*.toml`. Players get their client language, falling back to `en_us` when no file matches; the console and command descriptions use the server default.
 - `src/config.rs` loads TOML from the plugin data folder and writes embedded defaults from `config/` when files are missing. Existing config files are read as-is.
 - `tools/run-server/` is the native development launcher.
 
@@ -45,7 +46,7 @@ Before you say a change is done, `cargo fmt --all`, the Clippy command, `cargo t
 ### Add a new skill
 
 1. Add a variant to `SkillType` and to both `id()` and `from_id()`. The id is stored in the database: never rename or reuse an existing id.
-2. Add its display name in `SkillType::display_name()`.
+2. Add its name key in `SkillType::name_key()` and the text to every file in `config/lang/`.
 3. Put passive gameplay effects in `src/skills/<skill>/`, modelled on `mining/`, and wire them in `lib.rs::on_load` as needed. `SkillManager` stores one level-change handler, so extend its dispatch if a second skill needs level-change effects.
 4. Award XP from an event handler with `SkillManager::add_exp`. Add a descriptive skill command in `src/commands.rs` if the feature requires one.
 
@@ -77,7 +78,7 @@ Follow `MiningEffects::load` in `src/skills/mining/effects.rs`. Embed `config/<n
 
 - No `unwrap`, `panic!`, `todo!`, `println!` or `eprintln!` in plugin code. `expect("<name> lock")` is allowed only for `Mutex::lock` poisoning. Tests may `unwrap`.
 - Log with `tracing` (`error!` for failures you swallow, `info!` sparingly).
-- Player-facing text is Chinese; log messages, errors and code comments are English.
+- Player-facing text lives in `config/lang/*.toml` (`en_us` and `zh_cn`, same keys and placeholders) and is rendered through `crate::i18n`; log messages, errors and code comments are English.
 
 ### Style
 - Do not make simple things complicated: If it's not obvious, it's not simple.

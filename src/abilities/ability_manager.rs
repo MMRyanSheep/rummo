@@ -5,3 +5,11 @@ use serde::Deserialize;
 pub(crate) enum AbilityId {
     SuperBreaker,
 }
+
+impl AbilityId {
+    pub(crate) const fn name_key(self) -> &'static str {
+        match self {
+            Self::SuperBreaker => "ability.super_breaker.name",
+        }
+    }
+}

@@ -2,6 +2,7 @@ mod abilities;
 mod commands;
 mod config;
 mod events;
+mod i18n;
 pub mod skills;
 mod storage;
 mod ui;
@@ -47,9 +48,10 @@ impl Plugin for Rummo {
 
     fn on_load(&self, context: Context) -> Result<()> {
         let mining_event = MiningEvent::load(&context)?;
-        commands::register(&context)?;
         let data_folder = context.get_data_folder();
         let directory = Path::new(&data_folder);
+        i18n::load(directory)?;
+        commands::register(&context)?;
         let mining_effects = Arc::new(MiningEffects::load(&directory.join("mining.toml"))?);
         let boss_bars = Arc::new(BossBarManager::load(&directory.join("bossbar.toml"))?);
         let ability_registry = AbilityRegistry::load(&directory.join("abilities.toml"))?;

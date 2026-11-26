@@ -8,6 +8,7 @@ use pumpkin_plugin_api::permission::{Permission, PermissionDefault, PermissionLe
 use pumpkin_plugin_api::text::TextComponent;
 use pumpkin_plugin_api::{Context, Player, Result, Server};
 
+use crate::i18n::{self, Messages};
 use crate::skills::skill_manager::{SkillInfo, SkillManager, SkillType};
 
 use super::{AUTHORS, VERSION};
@@ -23,7 +24,7 @@ const ADMIN_COMMANDS: &[EditSkill] = &[
     EditSkill {
         name: "setexp",
         permission: SET_EXP_PERMISSION,
-        description: "设置玩家的技能经验",
+        description_key: "command.description.setexp",
         argument: "exp",
         minimum: 0,
         update: SkillManager::set_exp,
@@ -31,7 +32,7 @@ const ADMIN_COMMANDS: &[EditSkill] = &[
     EditSkill {
         name: "setlevel",
         permission: SET_LEVEL_PERMISSION,
-        description: "设置玩家的技能等级",
+        description_key: "command.description.setlevel",
         argument: "level",
         minimum: 1,
         update: SkillManager::set_level,
@@ -39,7 +40,7 @@ const ADMIN_COMMANDS: &[EditSkill] = &[
     EditSkill {
         name: "addexp",
         permission: ADD_EXP_PERMISSION,
-        description: "增加玩家的技能经验",
+        description_key: "command.description.addexp",
         argument: "exp",
         minimum: 0,
         update: SkillManager::add_exp,
@@ -47,7 +48,7 @@ const ADMIN_COMMANDS: &[EditSkill] = &[
     EditSkill {
         name: "addlevel",
         permission: ADD_LEVEL_PERMISSION,
-        description: "增加玩家的技能等级",
+        description_key: "command.description.addlevel",
         argument: "level",
         minimum: 0,
         update: SkillManager::add_level,
@@ -65,7 +66,8 @@ const BANNER: &str = r"
 ░░░░░░   ░░░░░   ░░      ░░ ░░      ░░  ░░░░░";
 
 pub(super) fn register(context: &Context) -> Result<()> {
-    let description = "查看 Rummo 信息和指令帮助";
+    let messages = i18n::server_default();
+    let description = messages.text("command.description.rummo");
     let mut rummo = Command::new(&["rummo".into()], description)
         .execute(ShowInfo)
         .then(CommandNode::literal("help").execute(ShowHelp));
@@ -74,7 +76,7 @@ pub(super) fn register(context: &Context) -> Result<()> {
         rummo = register_command(
             context,
             command.permission,
-            command.description,
+            messages.text(command.description_key),
             PermissionDefault::Op(PermissionLevel::Two),
             |_| rummo.then(command.node()),
         )?;
@@ -90,7 +92,7 @@ pub(super) fn register(context: &Context) -> Result<()> {
     )?;
 
     for &(skill, permission) in SKILL_COMMANDS {
-        let description = format!("查看自己的{}技能详情", skill.display_name());
+        let description = skill_description(&messages, skill);
         register_command(
             context,
             permission,
@@ -126,7 +128,7 @@ fn register_command<T>(
 struct EditSkill {
     name: &'static str,
     permission: &'static str,
-    description: &'static str,
+    description_key: &'static str,
     argument: &'static str,
     minimum: u32,
     update: fn(&Player, SkillType, u32) -> Result<SkillInfo>,
@@ -159,20 +161,24 @@ impl CommandHandler for EditSkill {
         server: Server,
         args: ConsumedArgs,
     ) -> Result<i32, CommandError> {
+        let messages = i18n::for_sender(&sender);
         if !self.can_execute(&sender, &server) {
-            return Err(command_failure("此指令需要至少 2 级 OP 和对应的权限。"));
+            return Err(command_failure(messages.text("command.error.permission")));
         }
 
         let player = match args.get_value("Player") {
             Arg::Players(mut players) if players.len() == 1 => players.pop(),
             _ => None,
         }
-        .ok_or_else(|| command_failure("请选择一名在线玩家。"))?;
+        .ok_or_else(|| command_failure(messages.text("command.error.player")))?;
         let Arg::Simple(skill_id) = args.get_value("skill") else {
-            return Err(command_failure("请输入技能 ID。"));
+            return Err(command_failure(messages.text("command.error.skill_id")));
         };
-        let skill = SkillType::from_id(&skill_id)
-            .ok_or_else(|| command_failure(&format!("未知技能「{skill_id}」。")))?;
+        let skill = SkillType::from_id(&skill_id).ok_or_else(|| {
+            command_failure(
+                &messages.format("command.error.unknown_skill", &[("skill", &skill_id)]),
+            )
+        })?;
         let value = match args.get_value(self.argument) {
             Arg::Num(Ok(Number::Int64(value)))
                 if (i64::from(self.minimum)..=i64::from(u32::MAX)).contains(&value) =>
@@ -180,19 +186,22 @@ impl CommandHandler for EditSkill {
                 value as u32
             }
             _ => {
-                return Err(command_failure(&format!(
-                    "请输入 {} 到 {} 之间的整数。",
-                    self.minimum,
-                    u32::MAX,
+                return Err(command_failure(&messages.format(
+                    "command.error.range",
+                    &[("min", &self.minimum), ("max", &u32::MAX)],
                 )));
             }
         };
 
         let name = player.get_name();
-        let info = (self.update)(&player, skill, value).map_err(skill_error)?;
-        sender.send_message(TextComponent::text(&format!(
-            "已更新 {name} 的技能：{}",
-            skill_details(skill, info),
+        let info =
+            (self.update)(&player, skill, value).map_err(|error| skill_error(&messages, error))?;
+        sender.send_message(TextComponent::text(&messages.format(
+            "command.updated",
+            &[
+                ("player", &name),
+                ("details", &skill_details(&messages, skill, info)),
+            ],
         )));
         Ok(0)
     }
@@ -207,17 +216,26 @@ impl CommandHandler for ShowSkill {
         _server: Server,
         _args: ConsumedArgs,
     ) -> Result<i32, CommandError> {
+        let messages = i18n::for_sender(&sender);
         let player = sender
             .as_player()
-            .ok_or_else(|| command_failure("此指令只能由玩家执行。"))?;
-        let info = SkillManager::get_skill(&player, self.0).map_err(skill_error)?;
-        sender.send_message(TextComponent::text(&skill_details(self.0, info)));
+            .ok_or_else(|| command_failure(messages.text("command.error.player_only")))?;
+        let info = SkillManager::get_skill(&player, self.0)
+            .map_err(|error| skill_error(&messages, error))?;
+        sender.send_message(TextComponent::text(&skill_details(&messages, self.0, info)));
         Ok(0)
     }
 }
 
-fn skill_details(skill: SkillType, info: SkillInfo) -> String {
-    let name = skill.display_name();
+fn skill_description(messages: &Messages, skill: SkillType) -> String {
+    messages.format(
+        "command.description.skill",
+        &[("skill", &messages.text(skill.name_key()))],
+    )
+}
+
+fn skill_details(messages: &Messages, skill: SkillType, info: SkillInfo) -> String {
+    let name = messages.text(skill.name_key());
     let SkillInfo {
         level,
         experience,
@@ -225,8 +243,23 @@ fn skill_details(skill: SkillType, info: SkillInfo) -> String {
         ..
     } = info;
     match required_experience {
-        Some(required) => format!("{name} Lv.{level} — 本级经验 {experience} / {required} XP"),
-        None => format!("{name} Lv.{level} — 已满级，当前经验 {experience} XP"),
+        Some(required) => messages.format(
+            "skill.details",
+            &[
+                ("skill", &name),
+                ("level", &level),
+                ("experience", &experience),
+                ("required", &required),
+            ],
+        ),
+        None => messages.format(
+            "skill.details_max",
+            &[
+                ("skill", &name),
+                ("level", &level),
+                ("experience", &experience),
+            ],
+        ),
     }
 }
 
@@ -234,9 +267,9 @@ fn command_failure(message: &str) -> CommandError {
     CommandError::CommandFailed(TextComponent::text(message))
 }
 
-fn skill_error(error: String) -> CommandError {
+fn skill_error(messages: &Messages, error: String) -> CommandError {
     tracing::error!(%error, "Skill command failed");
-    command_failure("技能操作失败，请查看服务器日志。")
+    command_failure(messages.text("command.error.skill_failed"))
 }
 
 struct ShowInfo;
@@ -253,11 +286,16 @@ impl CommandHandler for ShowInfo {
             g: 165,
             b: 0,
         });
-        let message = TextComponent::text("").add_child(banner).add_text(&format!(
-            "\n作者 {}  |  版本 {}",
-            AUTHORS.replace(':', ", "),
-            VERSION
-        ));
+        let info = i18n::for_sender(&sender).format(
+            "command.info",
+            &[
+                ("authors", &AUTHORS.replace(':', ", ")),
+                ("version", &VERSION),
+            ],
+        );
+        let message = TextComponent::text("")
+            .add_child(banner)
+            .add_text(&format!("\n{info}"));
         sender.send_message(message);
         Ok(0)
     }
@@ -272,13 +310,17 @@ impl CommandHandler for ShowHelp {
         server: Server,
         _args: ConsumedArgs,
     ) -> Result<i32, CommandError> {
-        sender.send_message(TextComponent::text("/rummo help — 列出可用指令"));
+        let messages = i18n::for_sender(&sender);
+        sender.send_message(TextComponent::text(&format!(
+            "/rummo help — {}",
+            messages.text("command.help"),
+        )));
         for &(skill, permission) in SKILL_COMMANDS {
             if sender.is_player() && sender.has_permission(&server, permission) {
                 sender.send_message(TextComponent::text(&format!(
-                    "/{} — 查看自己的{}技能详情",
+                    "/{} — {}",
                     skill.id(),
-                    skill.display_name(),
+                    skill_description(&messages, skill),
                 )));
             }
         }
@@ -286,7 +328,9 @@ impl CommandHandler for ShowHelp {
             if command.can_execute(&sender, &server) {
                 sender.send_message(TextComponent::text(&format!(
                     "/rummo {} <Player> <skill> <{}> — {}",
-                    command.name, command.argument, command.description,
+                    command.name,
+                    command.argument,
+                    messages.text(command.description_key),
                 )));
             }
         }

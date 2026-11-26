@@ -12,6 +12,7 @@ use super::ability_manager::AbilityId;
 use super::ability_registry::AbilityRegistry;
 use super::cooldown_manager::COOLDOWNS;
 use super::mining::super_breaker::activate_super_breaker;
+use crate::i18n;
 use crate::skills::skill_manager::player_uuid;
 
 type Uuid = u128;
@@ -107,8 +108,13 @@ pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player
             .as_nanos()
             .div_ceil(Duration::from_secs(1).as_nanos())
             .max(1);
-        player.show_subtitle(TextComponent::text(&format!(
-            "还剩{seconds}秒才可以激活超级挖掘机"
+        let messages = i18n::for_player(player);
+        player.show_subtitle(TextComponent::text(&messages.format(
+            "ability.cooldown",
+            &[
+                ("seconds", &seconds),
+                ("ability", &messages.text(ability_id.name_key())),
+            ],
         )));
         player.show_title(TextComponent::text(""));
         return;

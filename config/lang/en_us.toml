@@ -1,0 +1,44 @@
+# English messages, also used for client languages without a file. Text in {braces} is replaced at
+# runtime; keep the same placeholder names. Keys missing from this file use the bundled English text.
+
+[skill]
+mining = "Mining"
+axes = "Axes"
+# Shown by the skill commands.
+details = "{skill} Lv.{level} — {experience} / {required} XP this level"
+details_max = "{skill} Lv.{level} — max level, {experience} XP"
+
+[bossbar]
+progress = "{skill} Lv.{level} — {experience} / {required} XP"
+max = "{skill} Lv.{level} — max level"
+
+[ability]
+cooldown = "{ability} is ready in {seconds}s"
+
+[ability.super_breaker]
+name = "Super Breaker"
+activated = "Super Breaker activated"
+expired = "Super Breaker has worn off"
+
+[command]
+info = "Authors {authors}  |  Version {version}"
+help = "List available commands"
+updated = "Updated {player}'s skill: {details}"
+
+# Command and permission descriptions use the server default language.
+[command.description]
+rummo = "Show Rummo information and command help"
+skill = "Show your {skill} skill details"
+setexp = "Set a player's skill experience"
+setlevel = "Set a player's skill level"
+addexp = "Add skill experience to a player"
+addlevel = "Add skill levels to a player"
+
+[command.error]
+permission = "This command requires OP level 2 and the matching permission."
+player = "Select one online player."
+player_only = "Only players can run this command."
+skill_id = "Enter a skill ID."
+unknown_skill = "Unknown skill \"{skill}\"."
+range = "Enter a whole number from {min} to {max}."
+skill_failed = "The skill update failed. Check the server log."
