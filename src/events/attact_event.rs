@@ -48,7 +48,15 @@ impl EventHandler<EntityDamageByEntityEvent> for AxesAttack {
         let target_is_player = players
             .iter()
             .any(|player| player.as_entity().get_id() as i32 == data.entity_id);
-        data.damage = effects::multiply_damage(data.damage, target_is_player);
+        match SkillManager::get_skill(attacker, SkillType::Axes) {
+            Ok(skill) => {
+                data.damage = effects::multiply_damage(data.damage, target_is_player, skill.level);
+                println!("{}", data.damage);
+            }
+            Err(error) => {
+                tracing::error!(attacker_id = data.damager_id, %error, "Failed to read axes level for critical hit");
+            }
+        }
         if experience > 0
             && let Err(error) = SkillManager::add_exp(attacker, SkillType::Axes, experience)
         {

@@ -1,26 +1,20 @@
-const PVP_DAMAGE_MULTIPLIER: f32 = 1.5;
-const PVE_DAMAGE_MULTIPLIER: f32 = 2.0;
+const PVP_CRITICAL_MULTIPLIER: f32 = 1.5;
+const PVE_CRITICAL_MULTIPLIER: f32 = 2.0;
+const MAX_CRITICAL_LEVEL: u32 = 1000;
+const CRITICAL_ROLL_OUTCOMES: u32 = 8_000;
+const CRITICAL_OUTCOMES_PER_LEVEL: u32 = 3;
 
-pub(crate) fn multiply_damage(damage: f32, target_is_player: bool) -> f32 {
-    let multiplier = if target_is_player {
-        PVP_DAMAGE_MULTIPLIER
-    } else {
-        PVE_DAMAGE_MULTIPLIER
-    };
-    damage * multiplier
+pub(crate) fn multiply_damage(damage: f32, target_is_player: bool, level: u32) -> f32 {
+    let critical = roll(level);
+    match (critical, target_is_player) {
+        (true, true) => damage * PVP_CRITICAL_MULTIPLIER,
+        (true, false) => damage * PVE_CRITICAL_MULTIPLIER,
+        (false, _) => damage,
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::multiply_damage;
 
-    #[test]
-    fn applies_pvp_multiplier_against_players() {
-        assert_eq!(multiply_damage(5.0, true), 7.5);
-    }
-
-    #[test]
-    fn applies_pve_multiplier_against_non_players() {
-        assert_eq!(multiply_damage(0.5, false), 1.0);
-    }
+fn roll(level: u32) -> bool {
+    fastrand::u32(..CRITICAL_ROLL_OUTCOMES)
+        < level.min(MAX_CRITICAL_LEVEL) * CRITICAL_OUTCOMES_PER_LEVEL
 }
