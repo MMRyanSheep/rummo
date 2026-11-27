@@ -13,7 +13,6 @@ pub(crate) fn multiply_damage(damage: f32, target_is_player: bool, level: u32) -
     }
 }
 
-
 fn roll(level: u32) -> bool {
     fastrand::u32(..CRITICAL_ROLL_OUTCOMES)
         < level.min(MAX_CRITICAL_LEVEL) * CRITICAL_OUTCOMES_PER_LEVEL

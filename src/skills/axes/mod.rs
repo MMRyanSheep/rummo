@@ -1,3 +1,4 @@
+pub(crate) mod armor;
 pub(crate) mod effects;
 
 use pumpkin_plugin_api::Item;

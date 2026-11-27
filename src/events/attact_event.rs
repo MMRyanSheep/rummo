@@ -4,7 +4,7 @@ use pumpkin_plugin_api::events::{
 };
 use pumpkin_plugin_api::{Context, ItemStackExt, Result, Server};
 
-use crate::skills::axes::{effects, experience_for_damage, is_axe};
+use crate::skills::axes::{armor, effects, experience_for_damage, is_axe};
 use crate::skills::skill_manager::{SkillManager, SkillType};
 
 pub(crate) fn register(context: &Context) -> Result<()> {
@@ -45,13 +45,15 @@ impl EventHandler<EntityDamageByEntityEvent> for AxesAttack {
         }
 
         let experience = experience_for_damage(data.damage);
-        let target_is_player = players
+        let target = players
             .iter()
-            .any(|player| player.as_entity().get_id() as i32 == data.entity_id);
+            .find(|player| player.as_entity().get_id() as i32 == data.entity_id);
         match SkillManager::get_skill(attacker, SkillType::Axes) {
             Ok(skill) => {
-                data.damage = effects::multiply_damage(data.damage, target_is_player, skill.level);
-                println!("{}", data.damage);
+                data.damage = effects::multiply_damage(data.damage, target.is_some(), skill.level);
+                if let Some(target) = target {
+                    armor::wear_player_armor(target, skill.level);
+                }
             }
             Err(error) => {
                 tracing::error!(attacker_id = data.damager_id, %error, "Failed to read axes level for critical hit");
