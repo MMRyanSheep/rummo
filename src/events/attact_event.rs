@@ -4,11 +4,11 @@ use pumpkin_plugin_api::events::{
 };
 use pumpkin_plugin_api::{Context, ItemStackExt, Result, Server};
 
-use crate::skills::axes::{experience_for_damage, is_axe};
+use crate::skills::axes::{effects, experience_for_damage, is_axe};
 use crate::skills::skill_manager::{SkillManager, SkillType};
 
 pub(crate) fn register(context: &Context) -> Result<()> {
-    context.register_event_handler(AxesAttack, EventPriority::Normal, false)?;
+    context.register_event_handler(AxesAttack, EventPriority::Normal, true)?;
     Ok(())
 }
 
@@ -18,29 +18,39 @@ impl EventHandler<EntityDamageByEntityEvent> for AxesAttack {
     fn handle(
         &self,
         server: Server,
-        data: EventData<EntityDamageByEntityEvent>,
+        mut data: EventData<EntityDamageByEntityEvent>,
     ) -> EventData<EntityDamageByEntityEvent> {
-        if data.cancelled || !is_player_attack(&data.cause) {
-            return data;
-        }
-        let experience = experience_for_damage(data.damage);
-        if experience == 0 {
+        if data.cancelled
+            || !is_player_attack(&data.cause)
+            || !data.damage.is_finite()
+            || data.damage <= 0.0
+        {
             return data;
         }
 
-        let Some(attacker) = server
-            .get_all_players()
-            .into_iter()
+        let players = server.get_all_players();
+        let Some(attacker) = players
+            .iter()
             .find(|player| player.as_entity().get_id() as i32 == data.damager_id)
         else {
             return data;
         };
 
-        if attacker
+        if !attacker
             .get_item_in_hand(Hand::Right)
             .and_then(|stack| stack.get_item())
             .is_some_and(is_axe)
-            && let Err(error) = SkillManager::add_exp(&attacker, SkillType::Axes, experience)
+        {
+            return data;
+        }
+
+        let experience = experience_for_damage(data.damage);
+        let target_is_player = players
+            .iter()
+            .any(|player| player.as_entity().get_id() as i32 == data.entity_id);
+        data.damage = effects::multiply_damage(data.damage, target_is_player);
+        if experience > 0
+            && let Err(error) = SkillManager::add_exp(attacker, SkillType::Axes, experience)
         {
             tracing::error!(attacker_id = data.damager_id, %error, "Failed to add axes experience");
         }

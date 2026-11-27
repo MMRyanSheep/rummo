@@ -85,7 +85,8 @@ Follow `MiningEffects::load` in `src/skills/mining/effects.rs`. Embed `config/<n
 - Copy the closest existing code: how it registers, handles errors and orders imports (std, external crates, then `crate`/`super`).
 - Name magic numbers as constants (see `FLUSH_INTERVAL_TICKS`, `HIDE_AFTER`). Tick values are written as `20 * seconds`.
 - Keep changes as small as the task. No abstractions, traits, config options or feature flags for hypothetical future use; three similar lines are fine.
-- Search for an existing helper first (`player_uuid`, `block_id`, ...). If the same logic appears twice, extract it.
+- Keep simple conditions inline at the call site, even when formatting spans several lines. For example, write `if data.cancelled || !matches!(data.action, InteractAction::RightClickAir | InteractAction::RightClickBlock)` directly. Do not create a helper that just wraps a readable `matches!`, comparison, or boolean expression.
+- Search for an existing helper first (`player_uuid`, `block_id`, ...). If the same logic appears twice, extract it unless it is a simple inline check as described above.
 - Use the smallest visibility that works (`pub(super)` / `pub(crate)`).
 - No new clippy warnings. Do not fix unrelated existing ones in the same change.
 - Doc comments: one plain summary sentence on items whose behaviour isn't obvious; no comments that narrate the next line.

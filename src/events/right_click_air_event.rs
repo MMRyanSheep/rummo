@@ -7,7 +7,6 @@ use pumpkin_plugin_api::{Context, IntoItemKey, Item, Player, Result, Server};
 use crate::abilities::ability_manager::AbilityId;
 use crate::abilities::ability_registry::AbilityRegistry;
 use crate::abilities::active_ability_manager;
-use crate::abilities::cooldown_manager::CooldownManager;
 use crate::skills::axes::is_axe;
 
 pub(crate) fn register(context: &Context, ability_registry: AbilityRegistry) -> Result<()> {
@@ -18,7 +17,6 @@ pub(crate) fn register(context: &Context, ability_registry: AbilityRegistry) -> 
     )?;
     Ok(())
 }
-
 struct RightClickAir {
     ability_registry: AbilityRegistry,
 }
@@ -52,6 +50,7 @@ pub(crate) enum HeldItemCategory {
 }
 
 pub(crate) struct HeldItem {
+    #[cfg_attr(not(test), expect(dead_code, reason = "What is this for?"))]
     pub(crate) item_id: String,
     pub(crate) category: HeldItemCategory,
 }

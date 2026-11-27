@@ -1,3 +1,5 @@
+pub(crate) mod effects;
+
 use pumpkin_plugin_api::Item;
 
 pub(crate) fn experience_for_damage(damage: f32) -> u32 {
