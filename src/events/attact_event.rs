@@ -2,19 +2,20 @@ use pumpkin_plugin_api::common::Hand;
 use pumpkin_plugin_api::events::{
     EntityDamageByEntityEvent, EventData, EventHandler, EventPriority,
 };
-use pumpkin_plugin_api::{Context, ItemStackExt, Result, Server};
+use pumpkin_plugin_api::{Context, Item, ItemStack, ItemStackExt, Player, Result, Server};
 
-use crate::skills::axes::{armor, effects, experience_for_damage, is_axe};
+use crate::skills::axes::{armor, effects, is_axe};
+use crate::skills::experience_for_damage;
 use crate::skills::skill_manager::{SkillManager, SkillType};
 
 pub(crate) fn register(context: &Context) -> Result<()> {
-    context.register_event_handler(AxesAttack, EventPriority::Normal, true)?;
+    context.register_event_handler(CombatAttack, EventPriority::Normal, true)?;
     Ok(())
 }
 
-struct AxesAttack;
+struct CombatAttack;
 
-impl EventHandler<EntityDamageByEntityEvent> for AxesAttack {
+impl EventHandler<EntityDamageByEntityEvent> for CombatAttack {
     fn handle(
         &self,
         server: Server,
@@ -36,35 +37,58 @@ impl EventHandler<EntityDamageByEntityEvent> for AxesAttack {
             return data;
         };
 
-        if !attacker
-            .get_item_in_hand(Hand::Right)
-            .and_then(|stack| stack.get_item())
-            .is_some_and(is_axe)
-        {
+        let stack = attacker.get_item_in_hand(Hand::Right);
+        let Some(skill) = attack_skill(stack.as_ref()) else {
             return data;
-        }
+        };
 
         let experience = experience_for_damage(data.damage);
-        let target = players
-            .iter()
-            .find(|player| player.as_entity().get_id() as i32 == data.entity_id);
-        match SkillManager::get_skill(attacker, SkillType::Axes) {
-            Ok(skill) => {
-                data.damage = effects::multiply_damage(data.damage, target.is_some(), skill.level);
-                if let Some(target) = target {
-                    armor::wear_player_armor(target, skill.level);
-                }
-            }
-            Err(error) => {
-                tracing::error!(attacker_id = data.damager_id, %error, "Failed to read axes level for critical hit");
-            }
-        }
         if experience > 0
-            && let Err(error) = SkillManager::add_exp(attacker, SkillType::Axes, experience)
+            && let Err(error) = SkillManager::add_exp(attacker, skill, experience)
         {
-            tracing::error!(attacker_id = data.damager_id, %error, "Failed to add axes experience");
+            tracing::error!(attacker_id = data.damager_id, skill = skill.id(), %error, "Failed to add combat experience");
+        }
+
+        match skill {
+            SkillType::Axes => {
+                let target = players
+                    .iter()
+                    .find(|player| player.as_entity().get_id() as i32 == data.entity_id);
+                data.damage = apply_axe_effects(attacker, target, data.damage);
+            }
+            SkillType::Mining | SkillType::Unarmed => {}
         }
         data
+    }
+}
+
+/// The combat skill trained by the held stack, if any.
+fn attack_skill(stack: Option<&ItemStack>) -> Option<SkillType> {
+    let Some(stack) = stack else {
+        return Some(SkillType::Unarmed);
+    };
+    // Custom items yield `None` here and train nothing.
+    match stack.get_item()? {
+        Item::Air => Some(SkillType::Unarmed),
+        item if is_axe(item) => Some(SkillType::Axes),
+        _ => None,
+    }
+}
+
+/// Rolls the axe critical hit and armor wear, returning the damage to deal.
+fn apply_axe_effects(attacker: &Player, target: Option<&Player>, damage: f32) -> f32 {
+    match SkillManager::get_skill(attacker, SkillType::Axes) {
+        Ok(skill) => {
+            let damage = effects::multiply_damage(damage, target.is_some(), skill.level);
+            if let Some(target) = target {
+                armor::wear_player_armor(target, skill.level);
+            }
+            damage
+        }
+        Err(error) => {
+            tracing::error!(attacker_id = attacker.as_entity().get_id(), %error, "Failed to read axes level for critical hit");
+            damage
+        }
     }
 }
 

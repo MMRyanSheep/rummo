@@ -2,8 +2,12 @@ use pumpkin_plugin_api::wit::pumpkin::plugin::data_components::DataComponent;
 use pumpkin_plugin_api::{ItemStack, Player};
 
 const DAMAGE_PER_LEVEL: f32 = 0.3;
-
+const MAX_LEVEL: u32 = 1000;
+const MAX_CRIT_CHANCE: f64 = 0.325;
 pub(crate) fn wear_player_armor(player: &Player, level: u32) {
+    if !is_crit(level) {
+        return;
+    }
     let durability_loss = (level as f32 * DAMAGE_PER_LEVEL) as i32;
     if durability_loss == 0 {
         return;
@@ -25,6 +29,11 @@ pub(crate) fn wear_player_armor(player: &Player, level: u32) {
     }
 }
 
+fn is_crit(level: u32) -> bool {
+    let level = level.clamp(1, MAX_LEVEL);
+    let level_rand = (level - 1) as f64 / (MAX_LEVEL - 1) as f64 * MAX_CRIT_CHANCE;
+    fastrand::f64() < level_rand
+}
 /// Returns the slot update, with an empty slot for broken armor.
 fn wear_stack(stack: ItemStack, durability_loss: i32) -> Option<Option<ItemStack>> {
     let mut damage = 0;

@@ -4,6 +4,7 @@
 [skill]
 mining = "挖矿"
 axes = "斧技"
+unarmed = "空手"
 # Shown by the skill commands.
 details = "{skill} Lv.{level} — 本级经验 {experience} / {required} XP"
 details_max = "{skill} Lv.{level} — 已满级，当前经验 {experience} XP"

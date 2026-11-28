@@ -15,6 +15,7 @@ type LevelChangeHandler = Arc<dyn Fn(&Player, SkillType) + Send + Sync>;
 pub enum SkillType {
     Mining,
     Axes,
+    Unarmed,
 }
 
 impl SkillType {
@@ -22,6 +23,7 @@ impl SkillType {
         match self {
             Self::Mining => "mining",
             Self::Axes => "axes",
+            Self::Unarmed => "unarmed",
         }
     }
 
@@ -29,6 +31,7 @@ impl SkillType {
         match id {
             "mining" => Some(Self::Mining),
             "axes" => Some(Self::Axes),
+            "unarmed" => Some(Self::Unarmed),
             _ => None,
         }
     }
@@ -37,6 +40,7 @@ impl SkillType {
         match self {
             Self::Mining => "skill.mining",
             Self::Axes => "skill.axes",
+            Self::Unarmed => "skill.unarmed",
         }
     }
 }

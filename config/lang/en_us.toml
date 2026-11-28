@@ -4,6 +4,7 @@
 [skill]
 mining = "Mining"
 axes = "Axes"
+unarmed = "Unarmed"
 # Shown by the skill commands.
 details = "{skill} Lv.{level} — {experience} / {required} XP this level"
 details_max = "{skill} Lv.{level} — max level, {experience} XP"
