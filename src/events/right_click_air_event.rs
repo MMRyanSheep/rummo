@@ -26,7 +26,7 @@ impl EventHandler<PlayerInteractEvent> for RightClickAir {
         &self,
         _server: Server,
         mut data: EventData<PlayerInteractEvent>,
-    ) -> EventData<PlayerInteractEvent> {   
+    ) -> EventData<PlayerInteractEvent> {
         if data.cancelled || data.action != InteractAction::RightClickAir {
             return data;
         }

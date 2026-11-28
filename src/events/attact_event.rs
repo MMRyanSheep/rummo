@@ -62,6 +62,12 @@ impl EventHandler<EntityDamageByEntityEvent> for CombatAttack {
                 match SkillManager::get_skill(attacker, SkillType::Unarmed) {
                     Ok(skill) => {
                         data.damage = unarmed::effects::add_bonus_damage(data.damage, skill.level);
+                        if let Some(target) = players
+                            .iter()
+                            .find(|player| player.as_entity().get_id() as i32 == data.entity_id)
+                        {
+                            unarmed::disarm::try_disarm(target, skill.level);
+                        }
                     }
                     Err(error) => {
                         tracing::error!(attacker_id = data.damager_id, %error, "Failed to read unarmed level");
