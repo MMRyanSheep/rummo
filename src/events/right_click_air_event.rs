@@ -26,15 +26,15 @@ impl EventHandler<PlayerInteractEvent> for RightClickAir {
         &self,
         _server: Server,
         mut data: EventData<PlayerInteractEvent>,
-    ) -> EventData<PlayerInteractEvent> {
+    ) -> EventData<PlayerInteractEvent> {   
         if data.cancelled || data.action != InteractAction::RightClickAir {
             return data;
         }
-
         let (player, held_item) = get_held_item(data.player);
         data.player = player;
-        if let Some(item) = held_item
-            && let Some(ability_id) = item.ability_id()
+        // No stack means an empty main hand.
+        if let Some(ability_id) =
+            held_item.map_or(Some(AbilityId::Berserk), |item| item.ability_id())
         {
             active_ability_manager::activate(&self.ability_registry, ability_id, &data.player);
         }
@@ -46,6 +46,7 @@ impl EventHandler<PlayerInteractEvent> for RightClickAir {
 pub(crate) enum HeldItemCategory {
     Mining,
     Axes,
+    Unarmed,
     Other,
 }
 
@@ -59,6 +60,7 @@ impl HeldItem {
     fn ability_id(&self) -> Option<AbilityId> {
         match self.category {
             HeldItemCategory::Mining => Some(AbilityId::SuperBreaker),
+            HeldItemCategory::Unarmed => Some(AbilityId::Berserk),
             HeldItemCategory::Axes | HeldItemCategory::Other => None,
         }
     }
@@ -66,6 +68,7 @@ impl HeldItem {
     fn from_registry_key(key: String) -> Self {
         let item = Item::from_registry_key(&key);
         let category = match item {
+            Some(Item::Air) => HeldItemCategory::Unarmed,
             Some(item) if is_axe(item) => HeldItemCategory::Axes,
             Some(
                 Item::WoodenPickaxe
@@ -116,6 +119,14 @@ mod tests {
             let held = HeldItem::from_registry_key(item.into_item_key());
             assert_eq!(held.ability_id(), None);
         }
+    }
+
+    #[test]
+    fn maps_only_air_to_berserk() {
+        let held = HeldItem::from_registry_key(Item::Air.into_item_key());
+        assert_eq!(held.ability_id(), Some(AbilityId::Berserk));
+        let held = HeldItem::from_registry_key("custom:glove".into());
+        assert_eq!(held.ability_id(), None);
     }
 
     #[test]

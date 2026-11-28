@@ -4,9 +4,11 @@ use pumpkin_plugin_api::events::{
 };
 use pumpkin_plugin_api::{Context, Item, ItemStack, ItemStackExt, Player, Result, Server};
 
+use crate::abilities::unarmed::berserk;
 use crate::skills::axes::{armor, effects, is_axe};
 use crate::skills::experience_for_damage;
 use crate::skills::skill_manager::{SkillManager, SkillType};
+use crate::skills::unarmed;
 
 pub(crate) fn register(context: &Context) -> Result<()> {
     context.register_event_handler(CombatAttack, EventPriority::Normal, true)?;
@@ -56,7 +58,18 @@ impl EventHandler<EntityDamageByEntityEvent> for CombatAttack {
                     .find(|player| player.as_entity().get_id() as i32 == data.entity_id);
                 data.damage = apply_axe_effects(attacker, target, data.damage);
             }
-            SkillType::Mining | SkillType::Unarmed => {}
+            SkillType::Unarmed => {
+                match SkillManager::get_skill(attacker, SkillType::Unarmed) {
+                    Ok(skill) => {
+                        data.damage = unarmed::effects::add_bonus_damage(data.damage, skill.level);
+                    }
+                    Err(error) => {
+                        tracing::error!(attacker_id = data.damager_id, %error, "Failed to read unarmed level");
+                    }
+                }
+                data.damage = berserk::boost_damage(attacker, data.damage);
+            }
+            SkillType::Mining => {}
         }
         data
     }

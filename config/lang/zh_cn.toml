@@ -21,6 +21,11 @@ name = "超级挖掘机"
 activated = "已激活超级挖掘机"
 expired = "超级挖掘机技能已结束"
 
+[ability.berserk]
+name = "狂暴"
+activated = "已激活狂暴"
+expired = "狂暴技能已结束"
+
 [command]
 info = "作者 {authors}  |  版本 {version}"
 help = "列出可用指令"

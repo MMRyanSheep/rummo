@@ -3,6 +3,7 @@ use std::sync::Arc;
 use pumpkin_plugin_api::events::{EventData, EventHandler, EventPriority, PlayerJoinEvent};
 use pumpkin_plugin_api::{Context, Result, Server};
 
+use crate::abilities::unarmed::berserk;
 use crate::skills::mining::MiningEffects;
 use crate::ui::bossbar_manager::BossBarManager;
 
@@ -40,6 +41,7 @@ impl EventHandler<PlayerJoinEvent> for PlayerJoin {
         let player = &data.player;
         self.boss_bars.add_player(player);
         self.mining_effects.apply_speed(player);
+        berserk::remove_stale_speed_modifier(player);
         data
     }
 }

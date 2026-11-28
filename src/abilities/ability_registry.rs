@@ -62,6 +62,15 @@ mod tests {
     }
 
     #[test]
+    fn registers_berserk_from_the_default_config() {
+        let registry: AbilityRegistry = toml::from_str(DEFAULT_CONFIG).unwrap();
+        let definition = registry.get(AbilityId::Berserk).unwrap();
+
+        assert_eq!(definition.parent_skill, SkillType::Unarmed);
+        assert_eq!(definition.duration, Duration::from_secs(5));
+    }
+
+    #[test]
     fn loads_fractional_cooldown_seconds_as_a_duration() {
         let contents =
             DEFAULT_CONFIG.replace("cooldown_per_level = 2.0", "cooldown_per_level = 2.5");

@@ -10,3 +10,17 @@ cooldown_per_level = 2.0
 # Minimum cooldown in seconds.
 min_cooldown = 30.0
 duration = 4.0
+
+[abilities.berserk]
+# Parent skill ID.
+parent_skill = "unarmed"
+# Reserved unlock level.
+unlock_level = 10
+# Base cooldown in seconds.
+base_cooldown = 120.0
+# Cooldown reduction in seconds per parent skill level.
+cooldown_per_level = 2.0
+# Minimum cooldown in seconds.
+min_cooldown = 30.0
+# Active time in seconds.
+duration = 5.0

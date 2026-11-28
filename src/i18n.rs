@@ -285,6 +285,7 @@ mod tests {
             SkillType::Mining.name_key(),
             SkillType::Axes.name_key(),
             AbilityId::SuperBreaker.name_key(),
+            AbilityId::Berserk.name_key(),
         ] {
             assert!(english.contains_key(key), "{key}");
         }

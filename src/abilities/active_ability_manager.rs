@@ -11,6 +11,7 @@ use super::ability_lifecycle_service::AbilityLifecycleService;
 use super::ability_manager::AbilityId;
 use super::ability_registry::AbilityRegistry;
 use super::mining::super_breaker::activate_super_breaker;
+use super::unarmed::berserk::activate_berserk;
 use crate::i18n;
 use crate::skills::skill_manager::player_uuid;
 
@@ -105,6 +106,7 @@ pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player
 
     let activation = match ability_id {
         AbilityId::SuperBreaker => activate_super_breaker(player, player_id, definition),
+        AbilityId::Berserk => activate_berserk(player, player_id, definition),
     };
     match activation {
         Ok(true) => {}
@@ -123,6 +125,19 @@ pub(crate) fn activate(registry: &AbilityRegistry, ability_id: AbilityId, player
             .push(Reverse(expiration));
         AbilityLifecycleService::schedule_next();
     }
+}
+
+/// Whether the player's timed ability has not expired yet.
+pub(crate) fn is_active(player_id: u128, ability_id: AbilityId) -> bool {
+    let now = Instant::now();
+    ACTIVE_ABILITY_MANAGER
+        .lock()
+        .expect("active ability manager lock")
+        .expiration_queue
+        .iter()
+        .any(|Reverse(entry)| {
+            entry.uuid == player_id && entry.ability_id == ability_id && entry.expires_at > now
+        })
 }
 
 pub(super) fn show_cooldown(player: &Player, ability_id: AbilityId, remaining: Duration) {

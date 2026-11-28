@@ -7,6 +7,7 @@ use pumpkin_plugin_api::scheduler::{cancel_task, schedule_delayed_task};
 use super::ability_manager::AbilityId;
 use super::active_ability_manager::ACTIVE_ABILITY_MANAGER;
 use super::mining::super_breaker::deactivate_super_breaker;
+use super::unarmed::berserk::deactivate_berserk;
 use crate::skills::skill_manager::to_pumpkin_uuid;
 
 const TICK_DURATION: Duration = Duration::from_millis(50);
@@ -113,6 +114,7 @@ impl AbilityLifecycleService {
             };
             match entry.ability_id {
                 AbilityId::SuperBreaker => deactivate_super_breaker(&player),
+                AbilityId::Berserk => deactivate_berserk(&player),
             }
         }
 

@@ -21,6 +21,11 @@ name = "Super Breaker"
 activated = "Super Breaker activated"
 expired = "Super Breaker has worn off"
 
+[ability.berserk]
+name = "Berserk"
+activated = "Berserk activated"
+expired = "Berserk has worn off"
+
 [command]
 info = "Authors {authors}  |  Version {version}"
 help = "List available commands"
